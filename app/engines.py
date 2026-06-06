@@ -156,7 +156,10 @@ def buy_now(deal: dict[str, Any], best_now: float, prices_hist: list[float]) -> 
     base = deal["deal_score"]
     buy_score = clamp(base + trend_adj, 0, 100)
 
-    at_record_low = best_now <= low90 * 1.005
+    # An all-time low only counts when the floor is meaningfully below the
+    # typical price — otherwise a perfectly flat price would "tie" its own low
+    # and falsely look like a deal.
+    at_record_low = best_now <= low90 * 1.005 and deal["pct_below_avg"] >= 1.0
     if at_record_low:
         buy_score = max(buy_score, 90)
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -35,7 +34,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 # Helpers
 # ---------------------------------------------------------------------------
 
-def search_products(conn, q: Optional[str], category: Optional[str], limit: int = 50):
+def search_products(conn, q: str | None, category: str | None, limit: int = 50):
     sql = "SELECT * FROM products WHERE 1=1"
     params: list = []
     if q:
@@ -78,7 +77,7 @@ def health():
 
 
 @app.get("/api/products")
-def api_products(q: Optional[str] = None, category: Optional[str] = None):
+def api_products(q: str | None = None, category: str | None = None):
     with db.get_conn() as conn:
         rows = search_products(conn, q, category)
         return {"count": len(rows), "results": [product_card(conn, r) for r in rows]}
@@ -204,7 +203,7 @@ def api_check_alerts():
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, q: Optional[str] = None, category: Optional[str] = None):
+def home(request: Request, q: str | None = None, category: str | None = None):
     with db.get_conn() as conn:
         rows = search_products(conn, q, category)
         cards = [product_card(conn, r) for r in rows]

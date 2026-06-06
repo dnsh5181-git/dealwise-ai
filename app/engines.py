@@ -33,7 +33,7 @@ def _slope(ys: list[float]) -> float:
     den = sum((x - mx) ** 2 for x in xs)
     if den == 0:
         return 0.0
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
     return num / den
 
 

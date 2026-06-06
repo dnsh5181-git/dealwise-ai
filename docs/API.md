@@ -155,9 +155,11 @@ rewrites tone; every number still comes from the grounded payload.
 
 ### `GET /api/retailers`
 Lists configured retailer providers. `demo: true` marks public test APIs (not real
-retailers). **BestBuy** is the real US provider (needs `BESTBUY_API_KEY`).
+retailers). **eBay** (default) and **BestBuy** are real US sources; eBay needs
+`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`, BestBuy needs `BESTBUY_API_KEY`.
 ```json
-{ "providers": [ { "name": "BestBuy",  "live": true, "demo": false },
+{ "providers": [ { "name": "eBay",      "live": true, "demo": false },
+                 { "name": "BestBuy",   "live": true, "demo": false },
                  { "name": "DummyJSON", "live": true, "demo": true },
                  { "name": "FakeStore", "live": true, "demo": true } ] }
 ```
@@ -172,15 +174,15 @@ Dedupe/match per product:
   its price joins the existing entry for a cross-retailer comparison,
 - **added** — a new product. Each call records a fresh timestamped price.
 
-`provider` defaults to **BestBuy** (real US data, needs `BESTBUY_API_KEY`).
+`provider` defaults to **eBay** (real US data, needs `EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`).
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
   -H "Content-Type: application/json" \
-  -d '{"query":"air fryer","limit":10,"provider":"BestBuy"}'
+  -d '{"query":"air fryer","limit":10,"provider":"eBay"}'
 ```
 ```json
-{ "retailer": "BestBuy", "query": "air fryer", "fetched": 10,
+{ "retailer": "eBay", "query": "air fryer", "fetched": 10,
   "added": 8, "updated": 1, "matched": 1, "product_ids": [9, 10, "..."] }
 ```
 `limit` is 1–50 (default 10); empty `query` → `422`; unknown `provider` → `400`;

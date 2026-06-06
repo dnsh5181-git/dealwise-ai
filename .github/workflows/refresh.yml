@@ -29,6 +29,8 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Refresh prices
         env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           BESTBUY_API_KEY: ${{ secrets.BESTBUY_API_KEY }}
         run: python -m app.retailers.refresh
       - name: Upload DB artifact

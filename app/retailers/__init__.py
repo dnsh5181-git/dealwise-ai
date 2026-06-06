@@ -9,9 +9,11 @@ from __future__ import annotations
 from .base import LiveProduct, RetailerProvider
 from .bestbuy import BestBuyProvider
 from .dummyjson import DummyJSONProvider
+from .ebay import EbayProvider
 from .fakestore import FakeStoreProvider
 
 _PROVIDERS: dict[str, type[RetailerProvider]] = {
+    "eBay": EbayProvider,
     "BestBuy": BestBuyProvider,
     "DummyJSON": DummyJSONProvider,
     "FakeStore": FakeStoreProvider,
@@ -20,7 +22,9 @@ _PROVIDERS: dict[str, type[RetailerProvider]] = {
 # Real retailers vs. demo/testing APIs (surfaced in the UI so nothing fake looks real).
 _DEMO_PROVIDERS = {"DummyJSON", "FakeStore"}
 
-DEFAULT_PROVIDER = "BestBuy"
+# eBay is the default real source for v1 (free Developer Program accepts personal
+# email; Best Buy requires a business-domain email for its key).
+DEFAULT_PROVIDER = "eBay"
 
 
 def available() -> list[str]:
@@ -47,6 +51,7 @@ __all__ = [
     "DEFAULT_PROVIDER",
     "BestBuyProvider",
     "DummyJSONProvider",
+    "EbayProvider",
     "FakeStoreProvider",
     "LiveProduct",
     "RetailerProvider",

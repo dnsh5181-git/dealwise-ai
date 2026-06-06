@@ -28,19 +28,20 @@ TRACKED = [
 
 
 def main() -> int:
-    if not os.environ.get("BESTBUY_API_KEY"):
-        print("BESTBUY_API_KEY not set — skipping refresh (no-op).")
-        return 0
-
     db.init_db()
-    provider = get_provider("BestBuy")
+    provider = get_provider()  # the default real provider
     recorded = 0
-    with db.get_conn() as conn:
-        for query in TRACKED:
-            summary = ingest.ingest_search(conn, provider, query, 10)
-            recorded += summary["fetched"]
-            print(f"  refreshed {query!r}: {summary['fetched']} prices recorded")
-    print(f"Done. {recorded} price points recorded across {len(TRACKED)} queries.")
+    try:
+        with db.get_conn() as conn:
+            for query in TRACKED:
+                summary = ingest.ingest_search(conn, provider, query, 10)
+                recorded += summary["fetched"]
+                print(f"  refreshed {query!r}: {summary['fetched']} prices recorded")
+    except RuntimeError as exc:
+        # Missing credentials -> no-op so a scheduled job stays green.
+        print(f"Skipping refresh ({provider.name}): {exc}")
+        return 0
+    print(f"Done via {provider.name}. {recorded} price points across {len(TRACKED)} queries.")
     return 0
 
 

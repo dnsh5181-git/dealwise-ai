@@ -154,14 +154,62 @@ def test_bestbuy_missing_key_raises(monkeypatch):
         BestBuyProvider().search("air fryer")
 
 
+# ----- eBay provider parsing (OAuth + search, HTTP mocked) ------------------
+
+def _ebay_urlopen(token_payload, search_payload):
+    def _open(req, timeout=None):
+        if "identity/v1/oauth2/token" in req.full_url:
+            return _FakeResp(token_payload)
+        return _FakeResp(search_payload)
+    return _open
+
+
+def test_ebay_parses_real_fields(monkeypatch):
+    monkeypatch.setenv("EBAY_CLIENT_ID", "id")
+    monkeypatch.setenv("EBAY_CLIENT_SECRET", "secret")
+    from app.retailers import ebay
+    ebay._token_cache["value"] = ""          # reset module token cache
+    ebay._token_cache["expires_at"] = 0.0
+    token = {"access_token": "tok", "expires_in": 7200}
+    search = {"itemSummaries": [{
+        "itemId": "v1|123|0", "title": "Ninja Air Fryer Pro",
+        "price": {"value": "129.99", "currency": "USD"},
+        "image": {"imageUrl": "https://i.ebayimg.com/x.jpg"},
+        "itemWebUrl": "https://www.ebay.com/itm/123",
+        "categories": [{"categoryName": "Air Fryers"}],
+        "condition": "New",
+    }]}
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", _ebay_urlopen(token, search))
+    o = ebay.EbayProvider().search("air fryer")[0]
+    assert o.external_id == "v1|123|0"
+    assert o.name == "Ninja Air Fryer Pro"
+    assert o.price == 129.99
+    assert o.category == "Air Fryers"
+    assert o.image_url.endswith(".jpg")
+    assert o.url.startswith("https://www.ebay.com")
+    assert "New" in o.description
+
+
+def test_ebay_missing_creds_raises(monkeypatch):
+    monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
+    from app.retailers import ebay
+    ebay._token_cache["value"] = ""
+    ebay._token_cache["expires_at"] = 0.0
+    with pytest.raises(RuntimeError):
+        ebay.EbayProvider().search("air fryer")
+
+
 # ----- Provider registry ----------------------------------------------------
 
 def test_registry_lists_providers_and_default_is_real():
     from app import retailers
-    assert {"BestBuy", "DummyJSON", "FakeStore"} <= set(retailers.available())
-    assert retailers.DEFAULT_PROVIDER == "BestBuy"
-    assert retailers.get_provider().name == "BestBuy"
+    assert {"eBay", "BestBuy", "DummyJSON", "FakeStore"} <= set(retailers.available())
+    assert retailers.DEFAULT_PROVIDER == "eBay"
+    assert retailers.get_provider().name == "eBay"
     assert retailers.is_demo("DummyJSON") and retailers.is_demo("FakeStore")
+    assert not retailers.is_demo("eBay")
     assert not retailers.is_demo("BestBuy")
 
 

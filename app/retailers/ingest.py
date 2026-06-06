@@ -58,10 +58,12 @@ def _upsert_product(conn: sqlite3.Connection, source: str, lp: LiveProduct) -> t
         conn.execute(
             """UPDATE products
                SET name = ?, brand = ?, category = ?, description = ?,
-                   rating = ?, review_count = ?, norm_name = ?, image_url = ?
+                   rating = ?, review_count = ?, norm_name = ?, image_url = ?,
+                   model_number = ?, buy_url = ?
                WHERE id = ?""",
             (lp.name, lp.brand, lp.category, lp.description,
-             lp.rating, lp.review_count, norm, lp.image_url, row["id"]),
+             lp.rating, lp.review_count, norm, lp.image_url,
+             lp.model_number, lp.url, row["id"]),
         )
         return row["id"], "updated"
 
@@ -78,10 +80,11 @@ def _upsert_product(conn: sqlite3.Connection, source: str, lp: LiveProduct) -> t
     cur = conn.execute(
         """INSERT INTO products
            (name, brand, category, description, image_url, rating, review_count,
-            source, external_id, norm_name)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            model_number, buy_url, source, external_id, norm_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (lp.name, lp.brand, lp.category, lp.description, lp.image_url,
-         lp.rating, lp.review_count, source, lp.external_id, norm),
+         lp.rating, lp.review_count, lp.model_number, lp.url,
+         source, lp.external_id, norm),
     )
     return cur.lastrowid, "added"
 

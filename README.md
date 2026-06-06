@@ -94,33 +94,52 @@ curl -X POST http://127.0.0.1:8000/api/assistant \
 
 See [`docs/API.md`](docs/API.md) for the full reference.
 
-## Live retailer data
+## Real retailer data (US v1)
 
-Most of the catalog is seeded with 90 days of synthetic history (for a rich
-deal-score demo). You can also pull **real** products and prices over HTTP via the
-retailer-provider abstraction (`app/retailers/`). Two providers ship today —
-[DummyJSON](https://dummyjson.com) and [Fake Store](https://fakestoreapi.com),
-both public key-free commerce APIs standing in for real retailers. Adding a
-production retailer (Amazon PA-API, Walmart, Best Buy) is just another class
-implementing the same `search()` interface — nothing else changes.
+> **The default seed catalog is *sample data*** — hand-written products with
+> synthetic price history, for an offline demo. Items show a "Sample data" tag.
+> To get **real US prices, images, and model numbers**, ingest from Best Buy.
 
-Open **/retailers**, pick a provider, and fetch a query (e.g. "phone"), or use the API:
+The retailer-provider abstraction (`app/retailers/`) ships three providers:
+
+| Provider | Type | Data |
+|---|---|---|
+| **BestBuy** (default) | **real** | Live US prices, images, model numbers, buy links (free API key) |
+| DummyJSON, FakeStore | demo | Public test APIs — fake catalogs, clearly labeled "(demo)" |
+
+Adding more retailers (Amazon, Walmart, …) is just another class implementing the
+same `search()` interface — nothing else changes.
+
+**Get real data:**
+1. Grab a free key at https://developer.bestbuy.com and put it in `.env`:
+   `BESTBUY_API_KEY=...`
+2. Bootstrap a real starter catalog:
+   ```bash
+   python -m app.retailers.bootstrap
+   ```
+3. Now Search and the product pages show real Best Buy products with prices,
+   images, **model numbers**, and a **"Buy at BestBuy"** link-out (the affiliate
+   seam — append your Impact/CJ tag once approved). Or fetch ad-hoc on **/retailers**.
 
 ```bash
-curl "http://127.0.0.1:8000/api/retailers"     # list providers
+curl "http://127.0.0.1:8000/api/retailers"     # lists providers + demo flags
 curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
   -H "Content-Type: application/json" \
-  -d '{"query":"laptop","limit":10,"provider":"DummyJSON"}'
+  -d '{"query":"air fryer","limit":10,"provider":"BestBuy"}'
 ```
 
-Ingested products land in the same tables and run through the same engines, so
-they immediately appear in Search. Each ingest records a fresh timestamped price,
-so repeated fetches accumulate real price history — which is what sharpens the
-deal score over time. **When the same product is seen at two retailers** (matched
-by normalized name across live providers) the prices merge into one entry, giving
-a real multi-retailer comparison — a simple stand-in for the production canonical
-product graph. Unknown provider → `400`; network/parse failure → `502` with the
-catalog left untouched.
+Ingested products land in the same tables and run through the same engines. Each
+ingest records a fresh timestamped price, so **repeated fetches accumulate real
+price history** — run `python -m app.retailers.refresh` on a schedule (see
+`.github/workflows/refresh.yml`) to build the history that makes the deal score
+meaningful. The same product seen at two retailers (matched by normalized name)
+merges into one multi-retailer comparison. Unknown provider → `400`;
+network/parse failure or missing key → `502`, catalog left untouched.
+
+**Not in v1 (deferred to a funded phase):** real *Amazon* prices/history (needs a
+paid Keepa key or an approved Amazon Associates account + PA-API), in-app
+ordering/delivery (we compare and link out; the retailer fulfills), and
+multi-country support. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Optional: AI narration
 

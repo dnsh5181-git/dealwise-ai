@@ -7,13 +7,13 @@
   <form class="search" action="/retailers" method="get">
     <select name="provider" class="chip" style="padding:14px 12px">
       {% for p in providers %}
-        <option value="{{ p }}" {{ 'selected' if p == selected }}>{{ p }}</option>
+        <option value="{{ p.name }}" {{ 'selected' if p.name == selected }}>{{ p.name }}{{ ' (demo)' if p.demo }}</option>
       {% endfor %}
     </select>
     <input type="text" name="q" value="{{ q }}" placeholder="Fetch live, e.g. “phone”, “laptop”, “watch”" autofocus />
     <button type="submit">Fetch &amp; ingest</button>
   </form>
-  <p class="muted small">Providers: {{ providers | join(', ') }} (public demo commerce APIs) · same product seen at two retailers merges into one comparison · swappable for Amazon / Walmart / Best Buy</p>
+  <p class="muted small">Providers: {{ providers | map(attribute='name') | join(', ') }}. <strong>BestBuy</strong> is real US data (needs a free <code>BESTBUY_API_KEY</code> in <code>.env</code>); the others are demo APIs. Same product seen at two retailers merges into one comparison.</p>
 </section>
 
 {% if error %}
@@ -41,6 +41,7 @@
       {% endif %}
     </div>
     <h3>{{ c.name }}</h3>
+    {% if c.model_number %}<div class="muted small">Model #: {{ c.model_number }}</div>{% endif %}
     <div class="price-row">
       <div>
         <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>

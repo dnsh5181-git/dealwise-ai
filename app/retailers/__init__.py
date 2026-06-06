@@ -7,20 +7,30 @@ one line in ``_PROVIDERS`` below — nothing else in the platform changes.
 from __future__ import annotations
 
 from .base import LiveProduct, RetailerProvider
+from .bestbuy import BestBuyProvider
 from .dummyjson import DummyJSONProvider
 from .fakestore import FakeStoreProvider
 
 _PROVIDERS: dict[str, type[RetailerProvider]] = {
+    "BestBuy": BestBuyProvider,
     "DummyJSON": DummyJSONProvider,
     "FakeStore": FakeStoreProvider,
 }
 
-DEFAULT_PROVIDER = "DummyJSON"
+# Real retailers vs. demo/testing APIs (surfaced in the UI so nothing fake looks real).
+_DEMO_PROVIDERS = {"DummyJSON", "FakeStore"}
+
+DEFAULT_PROVIDER = "BestBuy"
 
 
 def available() -> list[str]:
     """Names of all configured retailer providers."""
     return list(_PROVIDERS)
+
+
+def is_demo(name: str) -> bool:
+    """True for demo/testing providers (not real retailers)."""
+    return name in _DEMO_PROVIDERS
 
 
 def get_provider(name: str | None = None) -> RetailerProvider:
@@ -35,6 +45,7 @@ def default_provider() -> RetailerProvider:
 
 __all__ = [
     "DEFAULT_PROVIDER",
+    "BestBuyProvider",
     "DummyJSONProvider",
     "FakeStoreProvider",
     "LiveProduct",
@@ -42,4 +53,5 @@ __all__ = [
     "available",
     "default_provider",
     "get_provider",
+    "is_demo",
 ]

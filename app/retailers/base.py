@@ -26,6 +26,7 @@ class LiveProduct:
     review_count: int
     url: str
     image_url: str = ""
+    model_number: str = ""
 
 
 class RetailerProvider:

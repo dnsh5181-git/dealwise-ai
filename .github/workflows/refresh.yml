@@ -1,0 +1,40 @@
+# TEMPLATE — scheduled price refresh to build real Best Buy price history.
+#
+# NOTE: GitHub Actions has an EPHEMERAL filesystem, so the SQLite DB created here
+# does not persist between runs. This workflow demonstrates the cadence and
+# uploads the resulting DB as an artifact. In PRODUCTION, run `python -m
+# app.retailers.refresh` on the host where the app + persistent DB live (cron,
+# systemd timer, or a worker), pointing at your real database.
+#
+# Set BESTBUY_API_KEY as a repository secret to enable real fetches; without it
+# the job no-ops (exit 0).
+
+name: Price refresh (template)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * *"   # daily at 09:00 UTC
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Refresh prices
+        env:
+          BESTBUY_API_KEY: ${{ secrets.BESTBUY_API_KEY }}
+        run: python -m app.retailers.refresh
+      - name: Upload DB artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dealwise-db
+          path: dealwise.db
+          if-no-files-found: ignore

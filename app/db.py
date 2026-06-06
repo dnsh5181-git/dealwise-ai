@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS products (
     rating          REAL DEFAULT 0,
     review_count    INTEGER DEFAULT 0,
     barcode         TEXT,
+    model_number    TEXT,            -- manufacturer model number / SKU (from real providers)
+    buy_url         TEXT,            -- outbound product URL to buy at the retailer (affiliate seam)
     source          TEXT,            -- provider name for live-ingested products (NULL for seed)
     external_id     TEXT,            -- provider's product id, for dedupe across ingests
     norm_name       TEXT,            -- normalized name, for matching the same product across retailers
@@ -112,6 +114,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE products ADD COLUMN external_id TEXT")
     if "norm_name" not in cols:
         conn.execute("ALTER TABLE products ADD COLUMN norm_name TEXT")
+    if "model_number" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN model_number TEXT")
+    if "buy_url" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN buy_url TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_products_source ON products(source, external_id)"
     )

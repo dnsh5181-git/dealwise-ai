@@ -78,6 +78,9 @@ def product_card(conn, row):
         "brand": row["brand"],
         "category": row["category"],
         "image_url": row["image_url"],
+        "model_number": row["model_number"],
+        "source": row["source"],
+        "is_sample": row["source"] is None,
         "rating": row["rating"],
         "review_count": row["review_count"],
         "best_price": analysis["best_price"] if analysis else None,
@@ -241,7 +244,10 @@ class IngestIn(BaseModel):
 
 @app.get("/api/retailers")
 def api_retailers():
-    return {"providers": [{"name": name, "live": True} for name in retailers.available()]}
+    return {"providers": [
+        {"name": name, "live": True, "demo": retailers.is_demo(name)}
+        for name in retailers.available()
+    ]}
 
 
 @app.post("/api/retailers/ingest")
@@ -318,7 +324,8 @@ def retailers_page(request: Request, q: str | None = None, provider: str | None 
             error = str(exc)
     return templates.TemplateResponse(request, "retailers.html", {
         "q": q or "", "summary": summary, "error": error, "cards": cards,
-        "providers": retailers.available(), "selected": prov.name,
+        "providers": [{"name": n, "demo": retailers.is_demo(n)} for n in retailers.available()],
+        "selected": prov.name,
     })
 
 

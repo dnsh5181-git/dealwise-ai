@@ -48,4 +48,5 @@ class DummyJSONProvider(RetailerProvider):
             review_count=review_count,
             url=f"{self.base_url}/products/{p.get('id')}",
             image_url=p.get("thumbnail") or (p.get("images") or [""])[0] or "",
+            model_number=str(p.get("sku") or ""),
         )

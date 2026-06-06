@@ -38,6 +38,7 @@ def _lp(external_id="1", name="Test Widget", price=10.0, in_stock=True):
         external_id=external_id, name=name, brand="TestCo", category="Test",
         description="A thing.", price=price, in_stock=in_stock,
         rating=4.2, review_count=3, url="https://example.com/1",
+        image_url="https://example.com/1.jpg", model_number="MDL-1",
     )
 
 
@@ -117,13 +118,51 @@ def test_fakestore_parses_and_filters(monkeypatch):
     assert o.in_stock is True
 
 
+# ----- Best Buy provider parsing (HTTP mocked) ------------------------------
+
+def test_bestbuy_parses_real_fields(monkeypatch):
+    monkeypatch.setenv("BESTBUY_API_KEY", "test-key")
+    payload = {"products": [{
+        "sku": 6377197, "name": "Ninja - Air Fryer Pro", "manufacturer": "Ninja",
+        "modelNumber": "AF141", "salePrice": 129.99, "regularPrice": 159.99,
+        "onlineAvailability": True, "image": "https://pisces.bbystatic.com/x.jpg",
+        "url": "https://www.bestbuy.com/site/x/6377197.p",
+        "customerReviewAverage": 4.7, "customerReviewCount": 7600,
+        "shortDescription": "Air fry with little to no oil.",
+        "categoryPath": [{"name": "Appliances"}, {"name": "Air Fryers"}],
+    }]}
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeResp(payload))
+    from app.retailers.bestbuy import BestBuyProvider
+    o = BestBuyProvider().search("air fryer")[0]
+    assert o.external_id == "6377197"
+    assert o.name == "Ninja - Air Fryer Pro"
+    assert o.model_number == "AF141"
+    assert o.price == 129.99            # salePrice preferred
+    assert o.category == "Air Fryers"   # last categoryPath name
+    assert o.in_stock is True
+    assert o.review_count == 7600
+    assert o.url.startswith("https://www.bestbuy.com")
+    assert o.image_url.endswith(".jpg")
+
+
+def test_bestbuy_missing_key_raises(monkeypatch):
+    monkeypatch.delenv("BESTBUY_API_KEY", raising=False)
+    from app.retailers.bestbuy import BestBuyProvider
+    with pytest.raises(RuntimeError):
+        BestBuyProvider().search("air fryer")
+
+
 # ----- Provider registry ----------------------------------------------------
 
-def test_registry_lists_both_providers():
+def test_registry_lists_providers_and_default_is_real():
     from app import retailers
-    assert {"DummyJSON", "FakeStore"} <= set(retailers.available())
-    assert retailers.get_provider("FakeStore").name == "FakeStore"
-    assert retailers.get_provider().name == retailers.DEFAULT_PROVIDER
+    assert {"BestBuy", "DummyJSON", "FakeStore"} <= set(retailers.available())
+    assert retailers.DEFAULT_PROVIDER == "BestBuy"
+    assert retailers.get_provider().name == "BestBuy"
+    assert retailers.is_demo("DummyJSON") and retailers.is_demo("FakeStore")
+    assert not retailers.is_demo("BestBuy")
 
 
 def test_registry_unknown_provider_raises():
@@ -185,6 +224,18 @@ def test_cross_provider_match_skips_seed_catalog():
     assert conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"] == 2
 
 
+def test_ingest_persists_model_number_and_buy_url():
+    conn = make_conn()
+    ingest.ingest_search(conn, FakeProvider([_lp()]), "widget")
+    row = conn.execute(
+        "SELECT model_number, buy_url, image_url FROM products "
+        "WHERE source = 'FakeMart' AND external_id = '1'"
+    ).fetchone()
+    assert row["model_number"] == "MDL-1"
+    assert row["buy_url"] == "https://example.com/1"
+    assert row["image_url"] == "https://example.com/1.jpg"
+
+
 def test_ingested_product_flows_through_engine():
     conn = make_conn()
     ingest.ingest_search(conn, FakeProvider([_lp(price=10.0)]), "widget")
@@ -216,8 +267,10 @@ def client(tmp_path_factory, monkeypatch):
 def test_api_list_retailers(client):
     r = client.get("/api/retailers")
     assert r.status_code == 200
-    names = [p["name"] for p in r.json()["providers"]]
-    assert "DummyJSON" in names and "FakeStore" in names
+    providers = {p["name"]: p for p in r.json()["providers"]}
+    assert {"BestBuy", "DummyJSON", "FakeStore"} <= set(providers)
+    assert providers["BestBuy"]["demo"] is False
+    assert providers["DummyJSON"]["demo"] is True
 
 
 def test_api_ingest_with_fake_provider(client, monkeypatch):

@@ -154,10 +154,12 @@ rewrites tone; every number still comes from the grounded payload.
 ## Live retailer integration
 
 ### `GET /api/retailers`
-Lists configured retailer providers.
+Lists configured retailer providers. `demo: true` marks public test APIs (not real
+retailers). **BestBuy** is the real US provider (needs `BESTBUY_API_KEY`).
 ```json
-{ "providers": [ { "name": "DummyJSON", "live": true },
-                 { "name": "FakeStore", "live": true } ] }
+{ "providers": [ { "name": "BestBuy",  "live": true, "demo": false },
+                 { "name": "DummyJSON", "live": true, "demo": true },
+                 { "name": "FakeStore", "live": true, "demo": true } ] }
 ```
 
 ### `POST /api/retailers/ingest`
@@ -170,18 +172,21 @@ Dedupe/match per product:
   its price joins the existing entry for a cross-retailer comparison,
 - **added** — a new product. Each call records a fresh timestamped price.
 
+`provider` defaults to **BestBuy** (real US data, needs `BESTBUY_API_KEY`).
+
 ```bash
 curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
   -H "Content-Type: application/json" \
-  -d '{"query":"laptop","limit":10,"provider":"DummyJSON"}'
+  -d '{"query":"air fryer","limit":10,"provider":"BestBuy"}'
 ```
 ```json
-{ "retailer": "DummyJSON", "query": "laptop", "fetched": 10,
+{ "retailer": "BestBuy", "query": "air fryer", "fetched": 10,
   "added": 8, "updated": 1, "matched": 1, "product_ids": [9, 10, "..."] }
 ```
 `limit` is 1–50 (default 10); empty `query` → `422`; unknown `provider` → `400`;
-provider/network failure → `502` (catalog unchanged). Ingested products are
-immediately searchable via `GET /api/products`.
+provider/network failure or missing API key → `502` (catalog unchanged). Ingested
+products (incl. `model_number` and `buy_url`) are immediately searchable via
+`GET /api/products`.
 
 ---
 

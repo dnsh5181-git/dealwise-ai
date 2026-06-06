@@ -36,6 +36,8 @@
       <span class="rec rec-{{ c.recommendation|replace(' ','')|lower }}">{{ c.recommendation }}</span>
     </div>
     <h3>{{ c.name }}</h3>
+    {% if c.model_number %}<div class="muted small">Model #: {{ c.model_number }}</div>{% endif %}
+    {% if c.is_sample %}<div class="muted small">Sample data</div>{% endif %}
     <div class="price-row">
       <div>
         <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>

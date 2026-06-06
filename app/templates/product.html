@@ -10,9 +10,14 @@
   </div>
   <div>
     <span class="brand-tag">{{ p.brand }}</span>
+    {% if not p.source %}<span class="tag" style="margin-left:8px">Sample data</span>{% endif %}
     <h1>{{ p.name }}</h1>
     <div class="rating">★ {{ '%.1f'|format(p.rating) }} <span class="muted">({{ '{:,}'.format(p.review_count) }} reviews)</span> · {{ p.category }}</div>
+    {% if p.model_number %}<div class="muted small">Model #: {{ p.model_number }}</div>{% endif %}
     <p class="desc">{{ p.description }}</p>
+    {% if p.buy_url %}
+      <a class="buy-btn" href="{{ p.buy_url }}" target="_blank" rel="nofollow sponsored noopener">Buy at {{ p.source }} →</a>
+    {% endif %}
   </div>
 </section>
 

@@ -106,7 +106,7 @@
   <h2>Set a price alert</h2>
   <form class="alert-form" action="/alerts/create" method="post">
     <input type="hidden" name="product_id" value="{{ p.id }}" />
-    <input type="email" name="email" value="dnsh5181@gmail.com" required />
+    <input type="email" name="email" value="demo@example.com" required />
     <label>Notify me below $
       <input type="number" step="0.01" name="target_price" value="{{ '%.0f'|format(a.low_90d) }}" required />
     </label>

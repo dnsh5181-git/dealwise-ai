@@ -242,7 +242,7 @@ def product_page(request: Request, product_id: int):
 
 
 @app.get("/alerts", response_class=HTMLResponse)
-def alerts_page(request: Request, email: str = "dnsh5181@gmail.com"):
+def alerts_page(request: Request, email: str = "demo@example.com"):
     with db.get_conn() as conn:
         rows = conn.execute(
             """SELECT a.*, p.name AS product_name FROM alerts a

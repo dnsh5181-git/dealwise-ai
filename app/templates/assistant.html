@@ -26,10 +26,11 @@
 {% if result.results %}
 <section class="grid">
   {% for c in result.results %}
-  <a class="card" href="/product/{{ c.id }}">
+  <a class="card" href="/product/{{ c.id }}" data-card>
     <div class="thumb">
       {% if c.image_url %}<img src="{{ c.image_url }}" alt="{{ c.name }}" loading="lazy" />
       {% else %}<span class="ph">{{ c.name[:1]|upper }}</span>{% endif %}
+      <button class="heart" type="button" data-wishlist="{{ c.id }}" aria-label="Save to wishlist">♥</button>
     </div>
     <div class="card-top">
       <span class="brand-tag">{{ c.brand }}</span>
@@ -42,6 +43,9 @@
       <div>
         <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>
         <div class="muted small">at {{ c.best_retailer }}</div>
+        {% if c.best_effective_price is not none and c.best_effective_price < c.best_price %}
+          <div class="eff small">${{ '%.2f'|format(c.best_effective_price) }} all-in</div>
+        {% endif %}
       </div>
       <div class="score-badge" data-score="{{ c.deal_score }}">
         <strong>{{ c.deal_score }}</strong><span>deal</span>

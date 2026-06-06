@@ -221,3 +221,39 @@ def test_analyze_flat_history_is_not_a_deal():
     # No discount vs a perfectly flat history -> not a Buy Now.
     assert result["recommendation"] != "Buy Now"
     assert result["deal_score"] < 60
+
+
+# ---------------------------------------------------------------------------
+# All-in effective price (coupons + cashback)
+# ---------------------------------------------------------------------------
+
+def test_effective_price_applies_coupon_then_cashback():
+    conn = make_conn()
+    rid = conn.execute(
+        "INSERT INTO retailers (name, cashback_pct) VALUES ('Shop', 10)").lastrowid
+    pid = conn.execute("INSERT INTO products (name) VALUES ('Gadget')").lastrowid
+    conn.execute(
+        "INSERT INTO prices (product_id, retailer_id, price, in_stock, recorded_at) "
+        "VALUES (?,?,?,1,?)", (pid, rid, 100.0, "2026-06-06 12:00:00"))
+    conn.execute(
+        "INSERT INTO coupons (product_id, retailer_id, code, discount_type, value) "
+        "VALUES (?,?,?,?,?)", (pid, rid, "SAVE20", "amount", 20))
+    conn.commit()
+
+    result = engines.analyze(conn, pid)
+    offer = result["offers"][0]
+    assert offer["coupon_savings"] == 20.0          # $20 off 100
+    assert offer["cashback_savings"] == 8.0         # 10% of post-coupon 80
+    assert offer["effective_price"] == 72.0
+    assert result["best_effective_price"] == 72.0
+    assert result["best_effective_retailer"] == "Shop"
+    assert result["effective_savings"] == 28.0      # 100 sticker -> 72 all-in
+
+
+def test_effective_price_equals_sticker_without_coupons_or_cashback():
+    conn = make_conn()
+    pid = seed_history(conn, flat_price=50.0, days=10, final_price=None)
+    result = engines.analyze(conn, pid)
+    # No coupons + zero cashback -> effective == sticker.
+    assert result["best_effective_price"] == result["best_price"]
+    assert result["effective_savings"] == 0.0

@@ -23,6 +23,18 @@ def clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
+def _best_coupon_savings(price: float, coupons) -> float:
+    """Largest savings from any applicable coupon (percent or fixed amount)."""
+    best = 0.0
+    for c in coupons:
+        if c["discount_type"] == "percent":
+            saving = price * (c["value"] or 0) / 100.0
+        else:
+            saving = float(c["value"] or 0)
+        best = max(best, min(saving, price))
+    return best
+
+
 def _slope(ys: list[float]) -> float:
     """Least-squares slope (price change per day) for a short series."""
     n = len(ys)
@@ -217,18 +229,38 @@ def analyze(conn: sqlite3.Connection, product_id: int) -> dict[str, Any] | None:
     deal = deal_score(best_now, prices_hist, max_now)
     decision = buy_now(deal, best_now, prices_hist)
 
+    # All-in "effective price": sticker - best coupon - retailer cashback, per offer.
+    coupon_rows = conn.execute(
+        "SELECT retailer_id, discount_type, value FROM coupons WHERE product_id = ?",
+        (product_id,),
+    ).fetchall()
+    offers = []
+    for r in latest:
+        applicable = [c for c in coupon_rows
+                      if c["retailer_id"] is None or c["retailer_id"] == r["retailer_id"]]
+        coupon_sav = _best_coupon_savings(r["price"], applicable)
+        after_coupon = r["price"] - coupon_sav
+        cashback_sav = after_coupon * (r["cashback_pct"] or 0) / 100.0
+        offers.append({
+            "retailer": r["retailer"],
+            "price": round(r["price"], 2),
+            "in_stock": bool(r["in_stock"]),
+            "cashback_pct": r["cashback_pct"],
+            "coupon_savings": round(coupon_sav, 2),
+            "cashback_savings": round(cashback_sav, 2),
+            "effective_price": round(after_coupon - cashback_sav, 2),
+        })
+
+    eff_pool = [o for o in offers if o["in_stock"]] or offers
+    best_eff = min(eff_pool, key=lambda o: o["effective_price"])
+
     return {
         "best_price": round(best_now, 2),
         "best_retailer": best_row["retailer"],
-        "offers": [
-            {
-                "retailer": r["retailer"],
-                "price": round(r["price"], 2),
-                "in_stock": bool(r["in_stock"]),
-                "cashback_pct": r["cashback_pct"],
-            }
-            for r in latest
-        ],
+        "best_effective_price": best_eff["effective_price"],
+        "best_effective_retailer": best_eff["retailer"],
+        "effective_savings": round(best_now - best_eff["effective_price"], 2),
+        "offers": offers,
         "history": [{"date": d, "price": round(p, 2)} for d, p in series],
         **deal,
         **decision,

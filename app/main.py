@@ -85,6 +85,8 @@ def product_card(conn, row):
         "review_count": row["review_count"],
         "best_price": analysis["best_price"] if analysis else None,
         "best_retailer": analysis["best_retailer"] if analysis else None,
+        "best_effective_price": analysis["best_effective_price"] if analysis else None,
+        "best_effective_retailer": analysis["best_effective_retailer"] if analysis else None,
         "deal_score": analysis["deal_score"] if analysis else None,
         "buy_now_score": analysis["buy_now_score"] if analysis else None,
         "recommendation": analysis["recommendation"] if analysis else None,
@@ -327,6 +329,12 @@ def retailers_page(request: Request, q: str | None = None, provider: str | None 
         "providers": [{"name": n, "demo": retailers.is_demo(n)} for n in retailers.available()],
         "selected": prov.name,
     })
+
+
+@app.get("/wishlist", response_class=HTMLResponse)
+def wishlist_page(request: Request):
+    # Wishlist is stored client-side (localStorage); the page hydrates via the API.
+    return templates.TemplateResponse(request, "wishlist.html", {})
 
 
 @app.get("/product/{product_id}", response_class=HTMLResponse)

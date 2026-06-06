@@ -31,6 +31,9 @@ of price history, nearby availability, coupons, and price alerts.
 | Barcode lookup | ✅ | `GET /api/barcode/{code}` |
 | AI Shopping Assistant | ✅ | `/assistant`, `POST /api/assistant` |
 | Live retailer integration | ✅ | `/retailers`, `POST /api/retailers/ingest` |
+| **All-in effective price** (coupons + cashback) | ✅ | `app/engines.py` `analyze()` → `best_effective_price` |
+| Wishlist (per-device) | ✅ | `/wishlist` + ♥ on cards (localStorage) |
+| Dark mode, interactive price chart, deal-score breakdown, price alert presets, share | ✅ | `app/static/app.js`, product page |
 
 The Deal Score and Buy-Now engines are **deterministic Python** computed from real
 price history — **no LLM, no Bedrock, no hallucinations, no API keys**. The AI

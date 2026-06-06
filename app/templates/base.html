@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}DealWise AI{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <script>
+    // Apply saved theme before paint to avoid a flash of the wrong theme.
+    (function () {
+      try {
+        var t = localStorage.getItem("dw-theme");
+        if (t) document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
@@ -15,8 +24,10 @@
       <a href="/">Search</a>
       <a href="/assistant">Assistant</a>
       <a href="/retailers">Live Data</a>
+      <a href="/wishlist">Wishlist</a>
       <a href="/alerts">Alerts</a>
       <a href="/docs">API</a>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
     </nav>
   </header>
 
@@ -28,6 +39,8 @@
     <span>DealWise AI — Shopping Intelligence Platform · MVP</span>
     <span class="muted">Deal Score &amp; Buy-Now are computed from real price history, not an LLM.</span>
   </footer>
+
+  <script src="/static/app.js" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -29,10 +29,11 @@
 
 <section class="grid">
   {% for c in cards %}
-  <a class="card" href="/product/{{ c.id }}">
+  <a class="card" href="/product/{{ c.id }}" data-card>
     <div class="thumb">
       {% if c.image_url %}<img src="{{ c.image_url }}" alt="{{ c.name }}" loading="lazy" />
       {% else %}<span class="ph">{{ c.name[:1]|upper }}</span>{% endif %}
+      <button class="heart" type="button" data-wishlist="{{ c.id }}" aria-label="Save to wishlist">♥</button>
     </div>
     <div class="card-top">
       <span class="brand-tag">{{ c.brand }}</span>

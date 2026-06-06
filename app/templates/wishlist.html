@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Wishlist — DealWise AI{% endblock %}
+{% block content %}
+<section class="product-head">
+  <h1>Your wishlist</h1>
+  <p class="muted">Saved on this device. Tap the heart on any product to add or remove it.</p>
+</section>
+<section class="grid" id="wl-grid"></section>
+<p class="empty" id="wl-empty" style="display:none">Nothing saved yet. Open a product and tap ♥ Save.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var ids = (window.DealWise && window.DealWise.savedIds()) || [];
+  var grid = document.getElementById('wl-grid');
+  var empty = document.getElementById('wl-empty');
+  if (!ids.length) { empty.style.display = 'block'; return; }
+
+  function money(v) { return (v == null) ? '—' : '$' + Number(v).toFixed(2); }
+  function tintBadge(el) {
+    var s = parseInt(el.dataset.score, 10); if (isNaN(s)) return;
+    var h = Math.round(s / 100 * 130);
+    el.style.background = 'hsl(' + h + ',70%,94%)';
+    el.style.color = 'hsl(' + h + ',70%,30%)';
+  }
+
+  Promise.all(ids.map(function (id) {
+    return fetch('/api/products/' + id).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  })).then(function (items) {
+    items.forEach(function (d) {
+      if (!d) return;
+      var p = d.product, a = d.analysis || {};
+      var img = p.image_url
+        ? '<img src="' + p.image_url + '" alt="" loading="lazy"/>'
+        : '<span class="ph">' + (p.name || '?').slice(0, 1).toUpperCase() + '</span>';
+      var rec = a.recommendation
+        ? '<span class="rec rec-' + a.recommendation.replace(/ /g, '').toLowerCase() + '">' + a.recommendation + '</span>' : '';
+      var eff = (a.best_effective_price != null && a.best_effective_price < a.best_price)
+        ? '<div class="eff small">' + money(a.best_effective_price) + ' all-in</div>' : '';
+      var badge = (a.deal_score != null)
+        ? '<div class="score-badge" data-score="' + a.deal_score + '"><strong>' + a.deal_score + '</strong><span>deal</span></div>' : '';
+      var card = document.createElement('a');
+      card.className = 'card'; card.href = '/product/' + p.id; card.setAttribute('data-card', '');
+      card.innerHTML =
+        '<div class="thumb">' + img +
+          '<button class="heart on" type="button" data-wishlist="' + p.id + '" data-remove-on-unsave="1" aria-label="Remove">♥</button></div>' +
+        '<div class="card-top"><span class="brand-tag">' + (p.brand || '') + '</span>' + rec + '</div>' +
+        '<h3>' + p.name + '</h3>' +
+        (p.model_number ? '<div class="muted small">Model #: ' + p.model_number + '</div>' : '') +
+        '<div class="price-row"><div><div class="best-price">' + money(a.best_price) + '</div>' +
+          '<div class="muted small">at ' + (a.best_retailer || '') + '</div>' + eff + '</div>' + badge + '</div>';
+      grid.appendChild(card);
+    });
+    grid.querySelectorAll('.score-badge').forEach(tintBadge);
+    if (window.DealWise) window.DealWise.wireHearts(grid);
+    if (!grid.children.length) empty.style.display = 'block';
+  });
+})();
+</script>
+{% endblock %}

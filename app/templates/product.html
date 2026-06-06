@@ -15,9 +15,13 @@
     <div class="rating">★ {{ '%.1f'|format(p.rating) }} <span class="muted">({{ '{:,}'.format(p.review_count) }} reviews)</span> · {{ p.category }}</div>
     {% if p.model_number %}<div class="muted small">Model #: {{ p.model_number }}</div>{% endif %}
     <p class="desc">{{ p.description }}</p>
-    {% if p.buy_url %}
-      <a class="buy-btn" href="{{ p.buy_url }}" target="_blank" rel="nofollow sponsored noopener">Buy at {{ p.source }} →</a>
-    {% endif %}
+    <div class="head-actions">
+      {% if p.buy_url %}
+        <a class="buy-btn" href="{{ p.buy_url }}" target="_blank" rel="nofollow sponsored noopener">Buy at {{ p.source }} →</a>
+      {% endif %}
+      <button class="share-btn" type="button" data-wishlist="{{ p.id }}">♥ Save</button>
+      <button class="share-btn" type="button" data-share data-share-title="{{ p.name }}">Share</button>
+    </div>
   </div>
 </section>
 
@@ -30,22 +34,42 @@
   </div>
 
   <div class="intel-card">
+    <div class="label">All-in price</div>
+    <div class="big eff">${{ '%.2f'|format(a.best_effective_price) }}</div>
+    <div class="muted small">
+      at {{ a.best_effective_retailer }}
+      {% if a.effective_savings > 0 %}· save ${{ '%.2f'|format(a.effective_savings) }} after coupons + cashback{% else %}· after coupons + cashback{% endif %}
+    </div>
+  </div>
+
+  <div class="intel-card">
     <div class="label">Deal score</div>
     <div class="gauge" data-score="{{ a.deal_score }}">
       <div class="big">{{ a.deal_score }}<span class="outof">/100</span></div>
     </div>
     <div class="muted small">{{ a.pct_below_avg }}% vs 90-day avg</div>
-  </div>
-
-  <div class="intel-card">
-    <div class="label">Buy-now score</div>
-    <div class="big">{{ a.buy_now_score }}<span class="outof">/100</span></div>
-    <div class="muted small">confidence {{ a.confidence }}%</div>
+    <details class="why">
+      <summary>Why this score?</summary>
+      {% set comps = [
+        ('Discount vs avg', a.components.discount_vs_avg, 40),
+        ('Range position', a.components.range_position, 30),
+        ('Near 90-day low', a.components.near_historical_low, 15),
+        ('Retailer spread', a.components.retailer_spread, 15)
+      ] %}
+      {% for lab, val, mx in comps %}
+      <div class="why-row">
+        <span class="lab">{{ lab }}</span>
+        <span class="why-bar"><span style="width: {{ (val / mx * 100) | round }}%"></span></span>
+        <span class="pts">{{ '%.0f'|format(val) }}/{{ mx }}</span>
+      </div>
+      {% endfor %}
+    </details>
   </div>
 
   <div class="intel-card rec-card rec-{{ a.recommendation|replace(' ','')|lower }}">
     <div class="label">AI recommendation</div>
     <div class="big rec-text">{{ a.recommendation }}</div>
+    <div class="muted small">buy-now {{ a.buy_now_score }}/100 · {{ a.confidence }}% conf</div>
   </div>
 </section>
 
@@ -54,8 +78,10 @@
 </section>
 
 <section class="panel">
-  <h2>Price history (90 days)</h2>
-  <div id="chart" data-pid="{{ p.id }}"></div>
+  <h2>Price history</h2>
+  <div id="chart" data-pid="{{ p.id }}">
+    <div class="chart-skeleton skeleton"></div>
+  </div>
   <div class="stat-row">
     <span>Low ${{ '%.2f'|format(a.low_90d) }}</span>
     <span>Avg ${{ '%.2f'|format(a.avg_90d) }}</span>
@@ -67,19 +93,21 @@
 <section class="panel">
   <h2>Compare prices</h2>
   <table class="cmp">
-    <thead><tr><th>Retailer</th><th>Price</th><th>Cashback</th><th>Stock</th><th></th></tr></thead>
+    <thead><tr><th>Retailer</th><th>Price</th><th>All-in</th><th>Cashback</th><th>Stock</th><th></th></tr></thead>
     <tbody>
       {% for o in a.offers %}
-      <tr class="{{ 'best-row' if o.retailer == a.best_retailer }}">
+      <tr class="{{ 'best-row' if o.retailer == a.best_effective_retailer }}">
         <td>{{ o.retailer }}</td>
         <td>${{ '%.2f'|format(o.price) }}</td>
+        <td class="eff">${{ '%.2f'|format(o.effective_price) }}</td>
         <td>{{ '%.0f%%'|format(o.cashback_pct) if o.cashback_pct else '—' }}</td>
         <td>{{ 'In stock' if o.in_stock else 'Out' }}</td>
-        <td>{% if o.retailer == a.best_retailer %}<span class="pill">Best</span>{% endif %}</td>
+        <td>{% if o.retailer == a.best_effective_retailer %}<span class="pill">Best all-in</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  <p class="muted small">“All-in” = price after the best coupon and retailer cashback. Taxes &amp; shipping vary by location and are not included.</p>
 </section>
 
 <div class="two-col">
@@ -113,11 +141,16 @@
 
 <section class="panel">
   <h2>Set a price alert</h2>
-  <form class="alert-form" action="/alerts/create" method="post">
+  <div class="presets">
+    <button class="preset" type="button" data-set-target="{{ '%.2f'|format(a.low_90d) }}" data-target-input="#target-price">All-time low (${{ '%.0f'|format(a.low_90d) }})</button>
+    <button class="preset" type="button" data-set-target="{{ '%.2f'|format(a.best_price * 0.9) }}" data-target-input="#target-price">−10% (${{ '%.0f'|format(a.best_price * 0.9) }})</button>
+    <button class="preset" type="button" data-set-target="{{ '%.2f'|format(a.best_price * 0.8) }}" data-target-input="#target-price">−20% (${{ '%.0f'|format(a.best_price * 0.8) }})</button>
+  </div>
+  <form class="alert-form" action="/alerts/create" method="post" data-loading>
     <input type="hidden" name="product_id" value="{{ p.id }}" />
     <input type="email" name="email" value="demo@example.com" required />
     <label>Notify me below $
-      <input type="number" step="0.01" name="target_price" value="{{ '%.0f'|format(a.low_90d) }}" required />
+      <input id="target-price" type="number" step="0.01" name="target_price" value="{{ '%.0f'|format(a.low_90d) }}" required />
     </label>
     <button type="submit">Create alert</button>
   </form>
@@ -129,38 +162,94 @@
 
 {% block scripts %}
 <script>
-  // Gauge tint
-  document.querySelectorAll('.gauge').forEach(function (el) {
-    var s = parseInt(el.dataset.score, 10);
-    var hue = Math.round((s / 100) * 130);
-    el.style.color = 'hsl(' + hue + ', 70%, 32%)';
-  });
-
-  // Render the 90-day price history as a lightweight inline SVG line chart.
+  // Interactive 90-day price-history chart (vanilla SVG: range toggles, hover).
   (function () {
     var box = document.getElementById('chart');
     if (!box) return;
-    fetch('/api/products/' + box.dataset.pid + '/history')
+    var pid = box.dataset.pid;
+    var full = [];
+    var range = 90;
+
+    function brand() {
+      return getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#2563eb';
+    }
+
+    function render() {
+      var pts = range ? full.slice(-range) : full;
+      if (!pts.length) { box.textContent = 'No history yet.'; return; }
+      var W = box.clientWidth || 760, H = 210, pad = 30;
+      var ys = pts.map(function (p) { return p.price; });
+      var min = Math.min.apply(null, ys), max = Math.max.apply(null, ys);
+      var avg = ys.reduce(function (a, b) { return a + b; }, 0) / ys.length;
+      var rng = (max - min) || 1;
+      var n = pts.length;
+      var sx = function (i) { return pad + (n === 1 ? 0 : (i / (n - 1)) * (W - 2 * pad)); };
+      var sy = function (v) { return H - pad - ((v - min) / rng) * (H - 2 * pad); };
+      var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + sx(i).toFixed(1) + ' ' + sy(p.price).toFixed(1); }).join(' ');
+      var area = line + ' L' + sx(n - 1).toFixed(1) + ' ' + (H - pad) + ' L' + sx(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+      var lowI = ys.indexOf(min);
+      var c = brand();
+
+      var svg =
+        '<svg id="chart-svg" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" style="display:block">' +
+        '<line x1="' + pad + '" y1="' + sy(avg).toFixed(1) + '" x2="' + (W - pad) + '" y2="' + sy(avg).toFixed(1) + '" stroke="var(--muted)" stroke-dasharray="4 4" stroke-width="1" opacity="0.6"/>' +
+        '<path d="' + area + '" fill="' + c + '" opacity="0.08"/>' +
+        '<path d="' + line + '" fill="none" stroke="' + c + '" stroke-width="2"/>' +
+        '<circle cx="' + sx(lowI).toFixed(1) + '" cy="' + sy(min).toFixed(1) + '" r="4" fill="#16a34a"/>' +
+        '<circle id="chart-now" cx="' + sx(n - 1).toFixed(1) + '" cy="' + sy(pts[n - 1].price).toFixed(1) + '" r="4" fill="' + c + '"/>' +
+        '<text x="' + pad + '" y="16" fill="var(--muted)" font-size="11">$' + max.toFixed(0) + '</text>' +
+        '<text x="' + pad + '" y="' + (H - 8) + '" fill="var(--muted)" font-size="11">$' + min.toFixed(0) + '</text>' +
+        '<line id="chart-guide" x1="0" y1="0" x2="0" y2="' + (H - pad) + '" stroke="' + c + '" stroke-width="1" opacity="0"/>' +
+        '</svg>' +
+        '<div class="chart-tip" id="chart-tip"></div>';
+      box.innerHTML = svg;
+
+      var svgEl = document.getElementById('chart-svg');
+      var tip = document.getElementById('chart-tip');
+      var guide = document.getElementById('chart-guide');
+      svgEl.addEventListener('mousemove', function (e) {
+        var r = svgEl.getBoundingClientRect();
+        var x = (e.clientX - r.left) / r.width * W;
+        var i = Math.round((x - pad) / ((W - 2 * pad) || 1) * (n - 1));
+        i = Math.max(0, Math.min(n - 1, i));
+        var px = sx(i), py = sy(pts[i].price);
+        guide.setAttribute('x1', px); guide.setAttribute('x2', px); guide.setAttribute('opacity', '0.4');
+        tip.style.left = (px / W * 100) + '%';
+        tip.style.top = (py / H * 100) + '%';
+        tip.textContent = '$' + pts[i].price.toFixed(2) + ' · ' + pts[i].date;
+        tip.style.opacity = '1';
+      });
+      svgEl.addEventListener('mouseleave', function () {
+        tip.style.opacity = '0'; guide.setAttribute('opacity', '0');
+      });
+    }
+
+    function toolbar() {
+      var bar = document.createElement('div');
+      bar.className = 'range-toggles';
+      [['30d', 30], ['90d', 90], ['All', 0]].forEach(function (opt) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.textContent = opt[0];
+        if (opt[1] === range) b.classList.add('on');
+        b.addEventListener('click', function () {
+          range = opt[1];
+          bar.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); });
+          b.classList.add('on');
+          render();
+        });
+        bar.appendChild(b);
+      });
+      box.parentNode.insertBefore(bar, box);
+    }
+
+    fetch('/api/products/' + pid + '/history')
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        var pts = data.history;
-        if (!pts.length) return;
-        var W = box.clientWidth || 760, H = 200, pad = 28;
-        var ys = pts.map(function (p) { return p.price; });
-        var min = Math.min.apply(null, ys), max = Math.max.apply(null, ys);
-        var rng = (max - min) || 1;
-        var sx = function (i) { return pad + (i / (pts.length - 1)) * (W - 2 * pad); };
-        var sy = function (v) { return H - pad - ((v - min) / rng) * (H - 2 * pad); };
-        var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + sx(i).toFixed(1) + ' ' + sy(p.price).toFixed(1); }).join(' ');
-        var area = d + ' L' + sx(pts.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + sx(0).toFixed(1) + ' ' + (H - pad) + ' Z';
-        box.innerHTML =
-          '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' +
-          '<path d="' + area + '" fill="rgba(37,99,235,0.08)"/>' +
-          '<path d="' + d + '" fill="none" stroke="#2563eb" stroke-width="2"/>' +
-          '<text x="' + pad + '" y="16" fill="#888" font-size="11">$' + max.toFixed(0) + '</text>' +
-          '<text x="' + pad + '" y="' + (H - 6) + '" fill="#888" font-size="11">$' + min.toFixed(0) + '</text>' +
-          '</svg>';
-      });
+        full = data.history || [];
+        toolbar();
+        render();
+      })
+      .catch(function () { box.textContent = 'Could not load price history.'; });
   })();
 </script>
 {% endblock %}

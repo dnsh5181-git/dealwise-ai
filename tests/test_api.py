@@ -147,3 +147,9 @@ def test_product_page_renders(client):
 def test_alerts_page_renders(client):
     r = client.get("/alerts")
     assert r.status_code == 200
+
+
+def test_wishlist_page_renders(client):
+    r = client.get("/wishlist")
+    assert r.status_code == 200
+    assert "wishlist" in r.text.lower()

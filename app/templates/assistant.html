@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}AI Assistant — DealWise AI{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Ask DealWise</h1>
+  <p class="sub">Natural-language shopping answers grounded in real platform data — prices, deal scores, and buy-now calls. No made-up numbers.</p>
+  <form class="search" action="/assistant" method="get">
+    <input type="text" name="q" value="{{ q }}" placeholder="e.g. What is the best air fryer under $100?" autofocus />
+    <button type="submit">Ask</button>
+  </form>
+  <div class="chips">
+    {% for ex in examples %}
+      <a class="chip" href="/assistant?q={{ ex | urlencode }}">{{ ex }}</a>
+    {% endfor %}
+  </div>
+</section>
+
+{% if result %}
+<section class="reason" style="font-size:1.05rem">
+  <strong>Answer:</strong> {{ result.answer }}
+  <div class="muted small" style="margin-top:8px">
+    intent: {{ result.intent }}{% if result.constraints.max_price %} · max ${{ '%.0f'|format(result.constraints.max_price) }}{% endif %}{% if result.constraints.keywords %} · matched: {{ result.constraints.keywords | join(', ') }}{% endif %}
+  </div>
+</section>
+
+{% if result.results %}
+<section class="grid">
+  {% for c in result.results %}
+  <a class="card" href="/product/{{ c.id }}">
+    <div class="card-top">
+      <span class="brand-tag">{{ c.brand }}</span>
+      <span class="rec rec-{{ c.recommendation|replace(' ','')|lower }}">{{ c.recommendation }}</span>
+    </div>
+    <h3>{{ c.name }}</h3>
+    <div class="price-row">
+      <div>
+        <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>
+        <div class="muted small">at {{ c.best_retailer }}</div>
+      </div>
+      <div class="score-badge" data-score="{{ c.deal_score }}">
+        <strong>{{ c.deal_score }}</strong><span>deal</span>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.score-badge').forEach(function (el) {
+    var s = parseInt(el.dataset.score, 10);
+    var hue = Math.round((s / 100) * 130);
+    el.style.background = 'hsl(' + hue + ', 70%, 94%)';
+    el.style.color = 'hsl(' + hue + ', 70%, 30%)';
+  });
+</script>
+{% endblock %}

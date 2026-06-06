@@ -112,11 +112,44 @@ prices, trips matches, returns what fired.
 
 ---
 
+## AI Shopping Assistant
+
+### `POST /api/assistant`
+Grounded natural-language answers built only from catalog data + the engines
+(no LLM, no invented numbers).
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"query":"best air fryer under $100"}'
+```
+```json
+{
+  "query": "best air fryer under $100",
+  "intent": "best_in_category",
+  "constraints": { "max_price": 100.0, "keywords": ["air", "fryer"] },
+  "answer": "Best pick under $100.00: Ninja Air Fryer Pro 5-Qt — $78.92 at Amazon (deal score 89/100, Buy Now). This is the lowest price in the last 90 days...",
+  "results": [
+    { "id": 1, "name": "Ninja Air Fryer Pro 5-Qt", "best_price": 78.92,
+      "best_retailer": "Amazon", "deal_score": 89, "buy_now_score": 90,
+      "recommendation": "Buy Now" }
+  ]
+}
+```
+
+Recognised intents: `best_in_category`, `should_i_buy`, `best_retailer`,
+`product_lookup`, and `no_match` (returned with empty `results` when nothing in
+the catalog fits — the assistant never fabricates a product or price). Empty
+`query` returns `422`.
+
+---
+
 ## Web routes (HTML)
 
 | Route | Page |
 |---|---|
 | `GET /` | Search + product grid (`?q=`, `?category=`) |
+| `GET /assistant` | AI assistant page (`?q=` runs a query) |
 | `GET /product/{id}` | Product detail (scores, history chart, comparison, alert form) |
 | `GET /alerts` | Alerts dashboard (`?email=`) |
 | `POST /alerts/create` | Create alert (form) |

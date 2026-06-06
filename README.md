@@ -29,9 +29,14 @@ of price history, nearby availability, coupons, and price alerts.
 | Nearby inventory | ✅ | seeded + shown on product page |
 | Price alerts + monitor | ✅ | `/alerts`, `POST /api/alerts/check` |
 | Barcode lookup | ✅ | `GET /api/barcode/{code}` |
+| AI Shopping Assistant | ✅ | `/assistant`, `POST /api/assistant` |
 
 The Deal Score and Buy-Now engines are **deterministic Python** computed from real
-price history — **no LLM, no Bedrock, no hallucinations, no API keys**.
+price history — **no LLM, no Bedrock, no hallucinations, no API keys**. The AI
+Shopping Assistant is the same idea applied to natural language: it parses a
+question ("best air fryer under $100", "should I buy the PS5 now?") into an intent
++ constraints and answers **only** from catalog data and the engines — so it never
+invents a price, and says "no match" when nothing fits.
 
 ## Tech stack (MVP)
 
@@ -69,6 +74,8 @@ To reseed manually: `python -m app.seed`
 curl -X POST http://127.0.0.1:8000/api/alerts/check
 ```
 
+- Ask the assistant at **/assistant**: *"best air fryer under $100"*, *"should I buy the PlayStation 5 now?"*
+
 ## API examples
 
 ```bash
@@ -76,6 +83,9 @@ curl "http://127.0.0.1:8000/api/products?q=air%20fryer"
 curl "http://127.0.0.1:8000/api/products/1"
 curl "http://127.0.0.1:8000/api/products/1/history"
 curl "http://127.0.0.1:8000/api/barcode/0622356561112"
+curl -X POST http://127.0.0.1:8000/api/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"query":"best air fryer under $100"}'
 ```
 
 See [`docs/API.md`](docs/API.md) for the full reference.
@@ -87,6 +97,7 @@ dealwise-ai/
 ├─ app/
 │  ├─ main.py        FastAPI app: JSON API + server-rendered pages
 │  ├─ engines.py     Deal Score + Buy-Now engines (the "AI")
+│  ├─ assistant.py   Grounded natural-language shopping assistant
 │  ├─ db.py          SQLite schema & connection
 │  ├─ seed.py        Sample-data generator (90 days of price history)
 │  ├─ templates/     Jinja2 pages
@@ -97,6 +108,6 @@ dealwise-ai/
 
 ## Not in the MVP (by design)
 
-Live retailer scrapers/APIs, mobile apps, browser extension, LLM shopping
-assistant, user accounts/auth, and the AWS production infrastructure. These are
-scoped in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Live retailer scrapers/APIs, mobile apps, browser extension, an LLM narration
+layer on top of the assistant, user accounts/auth, and the AWS production
+infrastructure. These are scoped in [`docs/ROADMAP.md`](docs/ROADMAP.md).

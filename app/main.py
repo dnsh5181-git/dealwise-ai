@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr, Field
 
-from . import db, engines
+from . import assistant, db, engines
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -198,6 +198,18 @@ def api_check_alerts():
     return {"triggered_count": len(triggered), "triggered": triggered}
 
 
+# ----- AI Shopping Assistant ------------------------------------------------
+
+class AssistantIn(BaseModel):
+    query: str = Field(min_length=1)
+
+
+@app.post("/api/assistant")
+def api_assistant(body: AssistantIn):
+    with db.get_conn() as conn:
+        return assistant.answer(conn, body.query)
+
+
 # ---------------------------------------------------------------------------
 # Web pages (server-rendered)
 # ---------------------------------------------------------------------------
@@ -212,6 +224,23 @@ def home(request: Request, q: str | None = None, category: str | None = None):
     return templates.TemplateResponse(request, "index.html", {
         "cards": cards, "q": q or "",
         "categories": cats, "active_category": category,
+    })
+
+
+@app.get("/assistant", response_class=HTMLResponse)
+def assistant_page(request: Request, q: str | None = None):
+    result = None
+    if q:
+        with db.get_conn() as conn:
+            result = assistant.answer(conn, q)
+    examples = [
+        "What is the best air fryer under $100?",
+        "Best 65-inch TV under $1000",
+        "Should I buy the PlayStation 5 now?",
+        "Which retailer gives the best deal for the Dyson?",
+    ]
+    return templates.TemplateResponse(request, "assistant.html", {
+        "q": q or "", "result": result, "examples": examples,
     })
 
 

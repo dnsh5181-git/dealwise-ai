@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Price alerts — DealWise AI{% endblock %}
+{% block content %}
+<section class="product-head">
+  <h1>Price alerts</h1>
+  <p class="muted">Alerts for {{ email }}. DealWise watches prices and trips an alert when the best price drops to your target.</p>
+</section>
+
+<section class="panel">
+  <form class="alert-check" action="/alerts" method="get">
+    <input type="email" name="email" value="{{ email }}" />
+    <button type="submit">View alerts</button>
+  </form>
+</section>
+
+<section class="panel">
+  {% if alerts %}
+  <table class="cmp">
+    <thead><tr><th>Product</th><th>Target</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for a in alerts %}
+      <tr>
+        <td><a href="/product/{{ a.product_id }}">{{ a.product_name }}</a></td>
+        <td>${{ '%.2f'|format(a.target_price) }}</td>
+        <td>
+          {% if a.active %}
+            <span class="tag">Watching</span>
+          {% else %}
+            <span class="tag ok">Triggered @ ${{ '%.2f'|format(a.triggered_price) }}</span>
+          {% endif %}
+        </td>
+        <td>
+          <form action="/alerts/{{ a.id }}/delete" method="post" style="margin:0">
+            <input type="hidden" name="email" value="{{ email }}" />
+            <button class="link-btn" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">Tip: <code>POST /api/alerts/check</code> simulates the monitor that evaluates active alerts against current prices.</p>
+  {% else %}
+  <p class="empty">No alerts yet. Open a product and use “Set a price alert”.</p>
+  {% endif %}
+</section>
+{% endblock %}

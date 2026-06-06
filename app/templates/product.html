@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }} — DealWise AI{% endblock %}
+{% block content %}
+<a class="back" href="/">← Back to search</a>
+
+<section class="product-head">
+  <div>
+    <span class="brand-tag">{{ p.brand }}</span>
+    <h1>{{ p.name }}</h1>
+    <div class="rating">★ {{ '%.1f'|format(p.rating) }} <span class="muted">({{ '{:,}'.format(p.review_count) }} reviews)</span> · {{ p.category }}</div>
+    <p class="desc">{{ p.description }}</p>
+  </div>
+</section>
+
+{% if a %}
+<section class="intel">
+  <div class="intel-card best">
+    <div class="label">Best price today</div>
+    <div class="big">${{ '%.2f'|format(a.best_price) }}</div>
+    <div class="muted">at {{ a.best_retailer }}</div>
+  </div>
+
+  <div class="intel-card">
+    <div class="label">Deal score</div>
+    <div class="gauge" data-score="{{ a.deal_score }}">
+      <div class="big">{{ a.deal_score }}<span class="outof">/100</span></div>
+    </div>
+    <div class="muted small">{{ a.pct_below_avg }}% vs 90-day avg</div>
+  </div>
+
+  <div class="intel-card">
+    <div class="label">Buy-now score</div>
+    <div class="big">{{ a.buy_now_score }}<span class="outof">/100</span></div>
+    <div class="muted small">confidence {{ a.confidence }}%</div>
+  </div>
+
+  <div class="intel-card rec-card rec-{{ a.recommendation|replace(' ','')|lower }}">
+    <div class="label">AI recommendation</div>
+    <div class="big rec-text">{{ a.recommendation }}</div>
+  </div>
+</section>
+
+<section class="reason">
+  <strong>Why:</strong> {{ a.reason }}
+</section>
+
+<section class="panel">
+  <h2>Price history (90 days)</h2>
+  <div id="chart" data-pid="{{ p.id }}"></div>
+  <div class="stat-row">
+    <span>Low ${{ '%.2f'|format(a.low_90d) }}</span>
+    <span>Avg ${{ '%.2f'|format(a.avg_90d) }}</span>
+    <span>High ${{ '%.2f'|format(a.high_90d) }}</span>
+    <span class="muted">14-day trend {{ a.trend_pct_14d }}%</span>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Compare prices</h2>
+  <table class="cmp">
+    <thead><tr><th>Retailer</th><th>Price</th><th>Cashback</th><th>Stock</th><th></th></tr></thead>
+    <tbody>
+      {% for o in a.offers %}
+      <tr class="{{ 'best-row' if o.retailer == a.best_retailer }}">
+        <td>{{ o.retailer }}</td>
+        <td>${{ '%.2f'|format(o.price) }}</td>
+        <td>{{ '%.0f%%'|format(o.cashback_pct) if o.cashback_pct else '—' }}</td>
+        <td>{{ 'In stock' if o.in_stock else 'Out' }}</td>
+        <td>{% if o.retailer == a.best_retailer %}<span class="pill">Best</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>Coupons &amp; cashback</h2>
+    {% for c in coupons %}
+      <div class="coupon">
+        <code>{{ c.code }}</code>
+        <span>{{ c.description }}{% if c.retailer %} · {{ c.retailer }}{% endif %}</span>
+      </div>
+    {% else %}<p class="muted">No coupons available.</p>{% endfor %}
+  </section>
+
+  <section class="panel">
+    <h2>Nearby availability <span class="muted">({{ nearby_count }} in stock)</span></h2>
+    {% for i in inventory %}
+      <div class="store">
+        <div>
+          <strong>{{ i.store_name }}</strong>
+          <span class="muted small">{{ '%.1f'|format(i.distance_mi) }} mi</span>
+        </div>
+        <div class="tags">
+          <span class="tag {{ 'ok' if i.in_stock else 'no' }}">{{ 'In stock' if i.in_stock else 'Out' }}</span>
+          {% if i.pickup and i.in_stock %}<span class="tag">Pickup</span>{% endif %}
+          {% if i.delivery %}<span class="tag">Delivery</span>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Set a price alert</h2>
+  <form class="alert-form" action="/alerts/create" method="post">
+    <input type="hidden" name="product_id" value="{{ p.id }}" />
+    <input type="email" name="email" value="dnsh5181@gmail.com" required />
+    <label>Notify me below $
+      <input type="number" step="0.01" name="target_price" value="{{ '%.0f'|format(a.low_90d) }}" required />
+    </label>
+    <button type="submit">Create alert</button>
+  </form>
+</section>
+{% else %}
+<p class="empty">No pricing data for this product yet.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Gauge tint
+  document.querySelectorAll('.gauge').forEach(function (el) {
+    var s = parseInt(el.dataset.score, 10);
+    var hue = Math.round((s / 100) * 130);
+    el.style.color = 'hsl(' + hue + ', 70%, 32%)';
+  });
+
+  // Render the 90-day price history as a lightweight inline SVG line chart.
+  (function () {
+    var box = document.getElementById('chart');
+    if (!box) return;
+    fetch('/api/products/' + box.dataset.pid + '/history')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var pts = data.history;
+        if (!pts.length) return;
+        var W = box.clientWidth || 760, H = 200, pad = 28;
+        var ys = pts.map(function (p) { return p.price; });
+        var min = Math.min.apply(null, ys), max = Math.max.apply(null, ys);
+        var rng = (max - min) || 1;
+        var sx = function (i) { return pad + (i / (pts.length - 1)) * (W - 2 * pad); };
+        var sy = function (v) { return H - pad - ((v - min) / rng) * (H - 2 * pad); };
+        var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + sx(i).toFixed(1) + ' ' + sy(p.price).toFixed(1); }).join(' ');
+        var area = d + ' L' + sx(pts.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + sx(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+        box.innerHTML =
+          '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' +
+          '<path d="' + area + '" fill="rgba(37,99,235,0.08)"/>' +
+          '<path d="' + d + '" fill="none" stroke="#2563eb" stroke-width="2"/>' +
+          '<text x="' + pad + '" y="16" fill="#888" font-size="11">$' + max.toFixed(0) + '</text>' +
+          '<text x="' + pad + '" y="' + (H - 6) + '" fill="#888" font-size="11">$' + min.toFixed(0) + '</text>' +
+          '</svg>';
+      });
+  })();
+</script>
+{% endblock %}

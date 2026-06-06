@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>The Bloomberg Terminal<br/>for shopping.</h1>
+  <p class="sub">Search any product to see the lowest price, a 0–100 deal score, and an AI buy-now call backed by 90 days of price history.</p>
+  <form class="search" action="/" method="get">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search “Ninja Air Fryer”, “PlayStation 5”, “Dyson”…" autofocus />
+    <button type="submit">Search</button>
+  </form>
+  <div class="chips">
+    <a class="chip {{ 'on' if not active_category }}" href="/">All</a>
+    {% for c in categories %}
+      <a class="chip {{ 'on' if active_category == c }}" href="/?category={{ c }}">{{ c }}</a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="grid">
+  {% for c in cards %}
+  <a class="card" href="/product/{{ c.id }}">
+    <div class="card-top">
+      <span class="brand-tag">{{ c.brand }}</span>
+      {% if c.recommendation %}
+        <span class="rec rec-{{ c.recommendation|replace(' ','')|lower }}">{{ c.recommendation }}</span>
+      {% endif %}
+    </div>
+    <h3>{{ c.name }}</h3>
+    <div class="rating">★ {{ '%.1f'|format(c.rating) }} <span class="muted">({{ '{:,}'.format(c.review_count) }})</span></div>
+    <div class="price-row">
+      <div>
+        <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>
+        <div class="muted small">at {{ c.best_retailer }}</div>
+      </div>
+      <div class="score-badge" data-score="{{ c.deal_score }}">
+        <strong>{{ c.deal_score }}</strong><span>deal</span>
+      </div>
+    </div>
+  </a>
+  {% else %}
+  <p class="empty">No products match “{{ q }}”. Try “air fryer”, “TV”, or “watch”.</p>
+  {% endfor %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Tint each deal-score badge by value (red -> amber -> green).
+  document.querySelectorAll('.score-badge').forEach(function (el) {
+    var s = parseInt(el.dataset.score, 10);
+    var hue = Math.round((s / 100) * 130); // 0=red, 130=green
+    el.style.background = 'hsl(' + hue + ', 70%, 94%)';
+    el.style.color = 'hsl(' + hue + ', 70%, 30%)';
+  });
+</script>
+{% endblock %}

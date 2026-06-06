@@ -125,11 +125,19 @@ catalog left untouched.
 ## Optional: AI narration
 
 The assistant works fully offline. To have an LLM rephrase its grounded answers in
-a friendlier tone, set an Anthropic key before launching:
+a friendlier tone, provide an Anthropic key. The simplest way is a **gitignored
+`.env`** file at the repo root (auto-loaded at startup) — copy `.env.example`:
+
+```ini
+# .env
+ANTHROPIC_API_KEY=sk-ant-...
+# DEALWISE_LLM_MODEL=claude-haiku-4-5   # optional; default claude-opus-4-8
+```
+
+Or set the variables in the shell before launching:
 
 ```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-..."         # enables narration
-$env:DEALWISE_LLM_MODEL = "claude-haiku-4-5"   # optional; default claude-opus-4-8
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
 uvicorn app.main:app
 ```
 

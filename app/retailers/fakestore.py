@@ -52,4 +52,5 @@ class FakeStoreProvider(RetailerProvider):
             rating=float(rating.get("rate") or 0.0),
             review_count=int(rating.get("count") or 0),
             url=f"{self.base_url}/products/{p.get('id')}",
+            image_url=p.get("image") or "",
         )

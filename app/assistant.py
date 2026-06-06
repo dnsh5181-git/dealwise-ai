@@ -141,6 +141,7 @@ def _card(r, a) -> dict[str, Any]:
     """The grounding data behind an answer (every number the text cites)."""
     return {
         "id": r["id"], "name": r["name"], "brand": r["brand"], "category": r["category"],
+        "image_url": r["image_url"],
         "best_price": a["best_price"], "best_retailer": a["best_retailer"],
         "deal_score": a["deal_score"], "buy_now_score": a["buy_now_score"],
         "recommendation": a["recommendation"],

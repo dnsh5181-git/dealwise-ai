@@ -25,6 +25,7 @@ class LiveProduct:
     rating: float
     review_count: int
     url: str
+    image_url: str = ""
 
 
 class RetailerProvider:

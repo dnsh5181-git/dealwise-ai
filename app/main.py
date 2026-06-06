@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,6 +17,24 @@ from .retailers import ingest
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _load_dotenv() -> None:
+    """Load KEY=VALUE lines from a gitignored .env at the repo root into the
+    environment (without overriding values already set). Keeps secrets like
+    ANTHROPIC_API_KEY out of the codebase and out of the shell history."""
+    env_path = BASE_DIR.parent / ".env"
+    if not env_path.exists():
+        return
+    for raw in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
 
 
 @asynccontextmanager
@@ -58,6 +77,7 @@ def product_card(conn, row):
         "name": row["name"],
         "brand": row["brand"],
         "category": row["category"],
+        "image_url": row["image_url"],
         "rating": row["rating"],
         "review_count": row["review_count"],
         "best_price": analysis["best_price"] if analysis else None,

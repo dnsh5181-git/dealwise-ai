@@ -4,6 +4,10 @@
 <a class="back" href="/">← Back to search</a>
 
 <section class="product-head">
+  <div class="thumb thumb-lg">
+    {% if p.image_url %}<img src="{{ p.image_url }}" alt="{{ p.name }}" />
+    {% else %}<span class="ph">{{ p.name[:1]|upper }}</span>{% endif %}
+  </div>
   <div>
     <span class="brand-tag">{{ p.brand }}</span>
     <h1>{{ p.name }}</h1>

@@ -36,7 +36,10 @@ price history — **no LLM, no Bedrock, no hallucinations, no API keys**. The AI
 Shopping Assistant is the same idea applied to natural language: it parses a
 question ("best air fryer under $100", "should I buy the PS5 now?") into an intent
 + constraints and answers **only** from catalog data and the engines — so it never
-invents a price, and says "no match" when nothing fits.
+invents a price, and says "no match" when nothing fits. An **optional LLM narration layer**
+(`app/narrator.py`, Anthropic Claude) can rephrase that grounded answer in a friendlier tone;
+it's off unless `ANTHROPIC_API_KEY` is set and degrades back to the deterministic text otherwise,
+so the app still runs fully offline.
 
 ## Tech stack (MVP)
 
@@ -90,6 +93,22 @@ curl -X POST http://127.0.0.1:8000/api/assistant \
 
 See [`docs/API.md`](docs/API.md) for the full reference.
 
+## Optional: AI narration
+
+The assistant works fully offline. To have an LLM rephrase its grounded answers in
+a friendlier tone, set an Anthropic key before launching:
+
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."         # enables narration
+$env:DEALWISE_LLM_MODEL = "claude-haiku-4-5"   # optional; default claude-opus-4-8
+uvicorn app.main:app
+```
+
+`/api/assistant` responses then include `"narrated": true` and `answer_raw` (the
+original deterministic text). The LLM only rewrites tone — it's instructed to use
+**only** the numbers already in the grounded payload, and the app silently falls
+back to the deterministic answer on any error or missing key.
+
 ## Project layout
 
 ```
@@ -98,6 +117,7 @@ dealwise-ai/
 │  ├─ main.py        FastAPI app: JSON API + server-rendered pages
 │  ├─ engines.py     Deal Score + Buy-Now engines (the "AI")
 │  ├─ assistant.py   Grounded natural-language shopping assistant
+│  ├─ narrator.py    Optional LLM narration layer (Anthropic Claude)
 │  ├─ db.py          SQLite schema & connection
 │  ├─ seed.py        Sample-data generator (90 days of price history)
 │  ├─ templates/     Jinja2 pages
@@ -108,6 +128,7 @@ dealwise-ai/
 
 ## Not in the MVP (by design)
 
-Live retailer scrapers/APIs, mobile apps, browser extension, an LLM narration
-layer on top of the assistant, user accounts/auth, and the AWS production
-infrastructure. These are scoped in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Live retailer scrapers/APIs, mobile apps, browser extension, user accounts/auth,
+and the AWS production infrastructure. These are scoped in
+[`docs/ROADMAP.md`](docs/ROADMAP.md). (The optional LLM narration layer is built —
+see "Optional: AI narration" above.)

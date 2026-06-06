@@ -142,6 +142,13 @@ Recognised intents: `best_in_category`, `should_i_buy`, `best_retailer`,
 the catalog fits — the assistant never fabricates a product or price). Empty
 `query` returns `422`.
 
+**Optional LLM narration.** If `ANTHROPIC_API_KEY` is set, the grounded answer is
+rephrased by Claude (`app/narrator.py`) and the response gains `"narrated": true`
+plus `answer_raw` (the original deterministic text). Without a key — or on any LLM
+error — `"narrated": false` and `answer` is the deterministic text. The model is
+configurable via `DEALWISE_LLM_MODEL` (default `claude-opus-4-8`). The LLM only
+rewrites tone; every number still comes from the grounded payload.
+
 ---
 
 ## Web routes (HTML)

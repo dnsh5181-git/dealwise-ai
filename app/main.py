@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr, Field
 
-from . import assistant, db, engines
+from . import assistant, db, engines, narrator
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -207,7 +207,7 @@ class AssistantIn(BaseModel):
 @app.post("/api/assistant")
 def api_assistant(body: AssistantIn):
     with db.get_conn() as conn:
-        return assistant.answer(conn, body.query)
+        return narrator.narrate(assistant.answer(conn, body.query))
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +232,7 @@ def assistant_page(request: Request, q: str | None = None):
     result = None
     if q:
         with db.get_conn() as conn:
-            result = assistant.answer(conn, q)
+            result = narrator.narrate(assistant.answer(conn, q))
     examples = [
         "What is the best air fryer under $100?",
         "Best 65-inch TV under $1000",

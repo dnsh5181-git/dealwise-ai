@@ -151,12 +151,40 @@ rewrites tone; every number still comes from the grounded payload.
 
 ---
 
+## Live retailer integration
+
+### `GET /api/retailers`
+Lists configured retailer providers.
+```json
+{ "providers": [ { "name": "DummyJSON", "live": true } ] }
+```
+
+### `POST /api/retailers/ingest`
+Fetches live offers for a query from the configured provider and upserts them
+into the catalog (deduped by `source` + provider id; each call records a fresh
+timestamped price). Makes an outbound HTTP call.
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
+  -H "Content-Type: application/json" -d '{"query":"laptop","limit":10}'
+```
+```json
+{ "retailer": "DummyJSON", "query": "laptop", "fetched": 10,
+  "added": 8, "updated": 2, "product_ids": [9, 10, 11, "..."] }
+```
+`limit` is 1–50 (default 10); empty `query` returns `422`. On any provider
+failure (network/parse) returns `502` and leaves the catalog unchanged.
+Ingested products are immediately searchable via `GET /api/products`.
+
+---
+
 ## Web routes (HTML)
 
 | Route | Page |
 |---|---|
 | `GET /` | Search + product grid (`?q=`, `?category=`) |
 | `GET /assistant` | AI assistant page (`?q=` runs a query) |
+| `GET /retailers` | Live-data page (`?q=` fetches & ingests) |
 | `GET /product/{id}` | Product detail (scores, history chart, comparison, alert form) |
 | `GET /alerts` | Alerts dashboard (`?email=`) |
 | `POST /alerts/create` | Create alert (form) |

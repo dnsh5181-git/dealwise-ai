@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS products (
     rating          REAL DEFAULT 0,
     review_count    INTEGER DEFAULT 0,
     barcode         TEXT,
+    source          TEXT,            -- provider name for live-ingested products (NULL for seed)
+    external_id     TEXT,            -- provider's product id, for dedupe across ingests
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
@@ -94,9 +96,22 @@ def get_conn() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create all tables and indexes if they do not yet exist."""
+    """Create all tables and indexes if they do not yet exist, then migrate."""
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive, idempotent migrations for databases created before a column existed."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(products)").fetchall()}
+    if "source" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN source TEXT")
+    if "external_id" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN external_id TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_products_source ON products(source, external_id)"
+    )
 
 
 def is_empty() -> bool:

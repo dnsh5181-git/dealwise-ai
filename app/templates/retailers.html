@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Live Data — DealWise AI{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Live retailer data</h1>
+  <p class="sub">Pull real products and prices from <strong>{{ provider }}</strong> into the catalog. Ingested items run through the same Deal Score &amp; Buy-Now engines and appear in Search.</p>
+  <form class="search" action="/retailers" method="get">
+    <input type="text" name="q" value="{{ q }}" placeholder="Fetch live, e.g. “phone”, “laptop”, “watch”" autofocus />
+    <button type="submit">Fetch &amp; ingest</button>
+  </form>
+  <p class="muted small">Provider: {{ provider }} (public demo commerce API) · swappable for Amazon / Walmart / Best Buy</p>
+</section>
+
+{% if error %}
+<section class="reason" style="background:#fef2f2;border-color:#fecaca">
+  <strong>Live fetch failed:</strong> {{ error }} — the catalog was left unchanged.
+</section>
+{% elif summary %}
+<section class="reason">
+  <strong>Ingested from {{ summary.retailer }}:</strong>
+  fetched {{ summary.fetched }} · added {{ summary.added }} · updated {{ summary.updated }}.
+  Repeat a fetch to accumulate price history (which sharpens the deal score).
+</section>
+
+<section class="grid">
+  {% for c in cards %}
+  <a class="card" href="/product/{{ c.id }}">
+    <div class="card-top">
+      <span class="brand-tag">{{ c.brand }}</span>
+      {% if c.recommendation %}
+        <span class="rec rec-{{ c.recommendation|replace(' ','')|lower }}">{{ c.recommendation }}</span>
+      {% endif %}
+    </div>
+    <h3>{{ c.name }}</h3>
+    <div class="price-row">
+      <div>
+        <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>
+        <div class="muted small">at {{ c.best_retailer }}</div>
+      </div>
+      <div class="score-badge" data-score="{{ c.deal_score }}">
+        <strong>{{ c.deal_score }}</strong><span>deal</span>
+      </div>
+    </div>
+  </a>
+  {% else %}
+  <p class="empty">No live products matched “{{ q }}”.</p>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.score-badge').forEach(function (el) {
+    var s = parseInt(el.dataset.score, 10);
+    var hue = Math.round((s / 100) * 130);
+    el.style.background = 'hsl(' + hue + ', 70%, 94%)';
+    el.style.color = 'hsl(' + hue + ', 70%, 30%)';
+  });
+</script>
+{% endblock %}

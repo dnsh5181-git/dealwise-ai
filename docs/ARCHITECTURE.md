@@ -80,7 +80,7 @@ the nearest threshold with how much history exists.
 | SQLite `dealwise.db` | Aurora PostgreSQL; `prices` partitioned **monthly** by `recorded_at` |
 | SQL `LIKE` search | OpenSearch with typo-tolerance, facets, ranking |
 | In-process engines | `deals` + `alerts` microservices on ECS Fargate |
-| Synthetic seed data | Kafka ingestion from retailer APIs/feeds, normalized into a canonical product graph |
+| Synthetic seed data **+ a live retailer-provider abstraction** (`app/retailers/`, first provider hits DummyJSON over HTTP and ingests into the catalog) | Kafka ingestion from many retailer APIs/feeds, normalized into a canonical product graph; the `RetailerProvider.search()` interface is the seam where real retailers plug in |
 | `POST /api/alerts/check` | EventBridge schedule → Lambda → SNS / push notifications |
 | No caching | ElastiCache (Redis) for hot product/price reads |
 | No LLM | Bedrock-backed AI assistant that **calls the deterministic engines** and narrates results (no free-form price hallucination) |

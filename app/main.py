@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr, Field
 
-from . import assistant, db, engines, narrator
+from . import assistant, db, engines, narrator, retailers
+from .retailers import ingest
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -210,6 +211,33 @@ def api_assistant(body: AssistantIn):
         return narrator.narrate(assistant.answer(conn, body.query))
 
 
+# ----- Live retailer integration --------------------------------------------
+
+class IngestIn(BaseModel):
+    query: str = Field(min_length=1)
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+@app.get("/api/retailers")
+def api_retailers():
+    return {"providers": [{"name": retailers.default_provider().name, "live": True}]}
+
+
+@app.post("/api/retailers/ingest")
+def api_ingest(body: IngestIn):
+    """Fetch live offers for a query and ingest them into the catalog.
+
+    Makes an outbound HTTP call to the configured retailer provider. On any
+    failure (network, parse) returns 502 rather than corrupting the catalog.
+    """
+    provider = retailers.default_provider()
+    try:
+        with db.get_conn() as conn:
+            return ingest.ingest_search(conn, provider, body.query, body.limit)
+    except Exception as exc:
+        raise HTTPException(502, f"Live retailer fetch failed: {exc}") from exc
+
+
 # ---------------------------------------------------------------------------
 # Web pages (server-rendered)
 # ---------------------------------------------------------------------------
@@ -241,6 +269,28 @@ def assistant_page(request: Request, q: str | None = None):
     ]
     return templates.TemplateResponse(request, "assistant.html", {
         "q": q or "", "result": result, "examples": examples,
+    })
+
+
+@app.get("/retailers", response_class=HTMLResponse)
+def retailers_page(request: Request, q: str | None = None):
+    provider = retailers.default_provider()
+    summary = None
+    error = None
+    cards = []
+    if q:
+        try:
+            with db.get_conn() as conn:
+                summary = ingest.ingest_search(conn, provider, q, 12)
+                for pid in summary["product_ids"]:
+                    row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+                    if row:
+                        cards.append(product_card(conn, row))
+        except Exception as exc:
+            error = str(exc)
+    return templates.TemplateResponse(request, "retailers.html", {
+        "q": q or "", "summary": summary, "error": error,
+        "cards": cards, "provider": provider.name,
     })
 
 

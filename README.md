@@ -30,6 +30,7 @@ of price history, nearby availability, coupons, and price alerts.
 | Price alerts + monitor | ✅ | `/alerts`, `POST /api/alerts/check` |
 | Barcode lookup | ✅ | `GET /api/barcode/{code}` |
 | AI Shopping Assistant | ✅ | `/assistant`, `POST /api/assistant` |
+| Live retailer integration | ✅ | `/retailers`, `POST /api/retailers/ingest` |
 
 The Deal Score and Buy-Now engines are **deterministic Python** computed from real
 price history — **no LLM, no Bedrock, no hallucinations, no API keys**. The AI
@@ -93,6 +94,28 @@ curl -X POST http://127.0.0.1:8000/api/assistant \
 
 See [`docs/API.md`](docs/API.md) for the full reference.
 
+## Live retailer data
+
+Most of the catalog is seeded with 90 days of synthetic history (for a rich
+deal-score demo). You can also pull **real** products and prices over HTTP via the
+retailer-provider abstraction (`app/retailers/`). The first provider is
+[DummyJSON](https://dummyjson.com) — a public, key-free commerce API standing in
+for a real retailer; a production integration (Amazon PA-API, Walmart, Best Buy)
+is just another class implementing the same `search()` interface.
+
+Open **/retailers** and fetch a query (e.g. "phone"), or use the API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
+  -H "Content-Type: application/json" -d '{"query":"laptop","limit":10}'
+```
+
+Ingested products land in the same tables and run through the same engines, so
+they immediately appear in Search. Each ingest records a fresh timestamped price,
+so repeated fetches accumulate real price history — which is what sharpens the
+deal score over time. Failures (network/parse) return `502` and leave the catalog
+untouched.
+
 ## Optional: AI narration
 
 The assistant works fully offline. To have an LLM rephrase its grounded answers in
@@ -118,6 +141,7 @@ dealwise-ai/
 │  ├─ engines.py     Deal Score + Buy-Now engines (the "AI")
 │  ├─ assistant.py   Grounded natural-language shopping assistant
 │  ├─ narrator.py    Optional LLM narration layer (Anthropic Claude)
+│  ├─ retailers/     Live retailer providers + catalog ingestion
 │  ├─ db.py          SQLite schema & connection
 │  ├─ seed.py        Sample-data generator (90 days of price history)
 │  ├─ templates/     Jinja2 pages

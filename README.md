@@ -1,5 +1,7 @@
 # DealWise AI
 
+[![CI](https://github.com/dnsh5181-git/dealwise-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsh5181-git/dealwise-ai/actions/workflows/ci.yml)
+
 **The Bloomberg Terminal for consumers** — an AI-powered shopping intelligence platform.
 
 Search any product and instantly get the lowest price across retailers, a 0–100

@@ -3,12 +3,17 @@
 {% block content %}
 <section class="hero">
   <h1>Live retailer data</h1>
-  <p class="sub">Pull real products and prices from <strong>{{ provider }}</strong> into the catalog. Ingested items run through the same Deal Score &amp; Buy-Now engines and appear in Search.</p>
+  <p class="sub">Pull real products and prices into the catalog from any configured retailer. Ingested items run through the same Deal Score &amp; Buy-Now engines and appear in Search.</p>
   <form class="search" action="/retailers" method="get">
+    <select name="provider" class="chip" style="padding:14px 12px">
+      {% for p in providers %}
+        <option value="{{ p }}" {{ 'selected' if p == selected }}>{{ p }}</option>
+      {% endfor %}
+    </select>
     <input type="text" name="q" value="{{ q }}" placeholder="Fetch live, e.g. “phone”, “laptop”, “watch”" autofocus />
     <button type="submit">Fetch &amp; ingest</button>
   </form>
-  <p class="muted small">Provider: {{ provider }} (public demo commerce API) · swappable for Amazon / Walmart / Best Buy</p>
+  <p class="muted small">Providers: {{ providers | join(', ') }} (public demo commerce APIs) · same product seen at two retailers merges into one comparison · swappable for Amazon / Walmart / Best Buy</p>
 </section>
 
 {% if error %}
@@ -18,8 +23,8 @@
 {% elif summary %}
 <section class="reason">
   <strong>Ingested from {{ summary.retailer }}:</strong>
-  fetched {{ summary.fetched }} · added {{ summary.added }} · updated {{ summary.updated }}.
-  Repeat a fetch to accumulate price history (which sharpens the deal score).
+  fetched {{ summary.fetched }} · added {{ summary.added }} · updated {{ summary.updated }} · matched {{ summary.matched }}.
+  “Matched” means the same product was already carried by another retailer — its price joined the existing comparison. Repeat a fetch to accumulate price history (which sharpens the deal score).
 </section>
 
 <section class="grid">

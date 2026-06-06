@@ -9,10 +9,16 @@ price history, which is what makes the deal score meaningful over time.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any
 
 from .base import LiveProduct, RetailerProvider
+
+
+def normalize_name(name: str) -> str:
+    """Lowercase alphanumeric tokens joined by single spaces — for cross-retailer matching."""
+    return " ".join(re.findall(r"[a-z0-9]+", name.lower()))
 
 
 def _ensure_retailer(conn: sqlite3.Connection, name: str) -> int:
@@ -26,8 +32,24 @@ def _ensure_retailer(conn: sqlite3.Connection, name: str) -> int:
     return cur.lastrowid
 
 
-def _upsert_product(conn: sqlite3.Connection, source: str, lp: LiveProduct) -> tuple[int, bool]:
-    """Insert or update a product keyed by (source, external_id). Returns (id, created)."""
+def _upsert_product(conn: sqlite3.Connection, source: str, lp: LiveProduct) -> tuple[int, str]:
+    """Resolve a product id for a live offer. Returns (id, status).
+
+    status is one of:
+      * "updated" — same provider re-ingesting its own product (by external_id)
+      * "matched" — same product from a *different* retailer (by normalized name);
+                    its price attaches to the existing product, enabling
+                    cross-retailer comparison without duplicating the catalog entry
+      * "added"   — a genuinely new product
+
+    Cross-retailer matching only considers other *live* products (``source`` not
+    NULL), so it never merges into the curated seed catalog. It's a deliberately
+    simple exact-normalized-name match — a stand-in for the production canonical
+    product graph (entity resolution).
+    """
+    norm = normalize_name(lp.name)
+
+    # 1) Same provider re-ingesting the same product -> refresh fields.
     row = conn.execute(
         "SELECT id FROM products WHERE source = ? AND external_id = ?",
         (source, lp.external_id),
@@ -36,20 +58,32 @@ def _upsert_product(conn: sqlite3.Connection, source: str, lp: LiveProduct) -> t
         conn.execute(
             """UPDATE products
                SET name = ?, brand = ?, category = ?, description = ?,
-                   rating = ?, review_count = ?
+                   rating = ?, review_count = ?, norm_name = ?
                WHERE id = ?""",
             (lp.name, lp.brand, lp.category, lp.description,
-             lp.rating, lp.review_count, row["id"]),
+             lp.rating, lp.review_count, norm, row["id"]),
         )
-        return row["id"], False
+        return row["id"], "updated"
+
+    # 2) Same product from another retailer -> attach price to the existing row.
+    if norm:
+        row = conn.execute(
+            "SELECT id FROM products WHERE source IS NOT NULL AND norm_name = ? LIMIT 1",
+            (norm,),
+        ).fetchone()
+        if row:
+            return row["id"], "matched"
+
+    # 3) New product.
     cur = conn.execute(
         """INSERT INTO products
-           (name, brand, category, description, rating, review_count, source, external_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (name, brand, category, description, rating, review_count,
+            source, external_id, norm_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (lp.name, lp.brand, lp.category, lp.description,
-         lp.rating, lp.review_count, source, lp.external_id),
+         lp.rating, lp.review_count, source, lp.external_id, norm),
     )
-    return cur.lastrowid, True
+    return cur.lastrowid, "added"
 
 
 def _record_price(conn: sqlite3.Connection, product_id: int, retailer_id: int,
@@ -67,22 +101,19 @@ def ingest_search(conn: sqlite3.Connection, provider: RetailerProvider,
     products = provider.search(query, limit)
     retailer_id = _ensure_retailer(conn, provider.name)
 
-    added = 0
-    updated = 0
+    counts = {"added": 0, "updated": 0, "matched": 0}
     product_ids: list[int] = []
     for lp in products:
-        pid, created = _upsert_product(conn, provider.name, lp)
+        pid, status = _upsert_product(conn, provider.name, lp)
         _record_price(conn, pid, retailer_id, lp.price, lp.in_stock)
         product_ids.append(pid)
-        added += int(created)
-        updated += int(not created)
+        counts[status] += 1
 
     conn.commit()
     return {
         "retailer": provider.name,
         "query": query,
         "fetched": len(products),
-        "added": added,
-        "updated": updated,
+        **counts,
         "product_ids": product_ids,
     }

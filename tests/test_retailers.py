@@ -25,9 +25,8 @@ def make_conn() -> sqlite3.Connection:
 
 
 class FakeProvider(RetailerProvider):
-    name = "FakeMart"
-
-    def __init__(self, products):
+    def __init__(self, products, name="FakeMart"):
+        self.name = name
         self._products = products
 
     def search(self, query, limit=10):
@@ -93,6 +92,46 @@ def test_dummyjson_handles_missing_fields(monkeypatch):
     assert o.review_count == 0
 
 
+# ----- Fake Store provider parsing (HTTP mocked) ----------------------------
+
+def test_fakestore_parses_and_filters(monkeypatch):
+    # Fake Store returns a JSON array with no search endpoint -> client-side filter.
+    payload = [
+        {"id": 1, "title": "Mens Cotton Jacket", "price": 55.99,
+         "category": "men's clothing", "description": "Warm.",
+         "rating": {"rate": 4.5, "count": 120}},
+        {"id": 2, "title": "Steel Water Bottle", "price": 12.0,
+         "category": "kitchen", "description": "Holds water.",
+         "rating": {"rate": 4.0, "count": 30}},
+    ]
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeResp(payload))
+    from app.retailers.fakestore import FakeStoreProvider
+    offers = FakeStoreProvider().search("jacket")
+    assert len(offers) == 1
+    o = offers[0]
+    assert o.name == "Mens Cotton Jacket"
+    assert o.price == 55.99
+    assert o.review_count == 120
+    assert o.in_stock is True
+
+
+# ----- Provider registry ----------------------------------------------------
+
+def test_registry_lists_both_providers():
+    from app import retailers
+    assert {"DummyJSON", "FakeStore"} <= set(retailers.available())
+    assert retailers.get_provider("FakeStore").name == "FakeStore"
+    assert retailers.get_provider().name == retailers.DEFAULT_PROVIDER
+
+
+def test_registry_unknown_provider_raises():
+    from app import retailers
+    with pytest.raises(KeyError):
+        retailers.get_provider("Nope")
+
+
 # ----- Ingestion ------------------------------------------------------------
 
 def test_ingest_adds_then_dedupes_and_records_history():
@@ -110,6 +149,40 @@ def test_ingest_adds_then_dedupes_and_records_history():
 
     assert conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"] == 1
     assert conn.execute("SELECT COUNT(*) AS n FROM prices").fetchone()["n"] == 2
+
+
+def test_cross_provider_match_merges_into_one_comparison():
+    """The payoff of the abstraction: the same product from two retailers becomes
+    one catalog entry with a two-retailer price comparison."""
+    conn = make_conn()
+    ingest.ingest_search(
+        conn, FakeProvider([_lp(external_id="a1", name="Acme Blender 3000", price=50.0)],
+                           name="AlphaMart"), "blender")
+    # Different provider + id, same normalized name (extra spaces), lower price.
+    r = ingest.ingest_search(
+        conn, FakeProvider([_lp(external_id="z9", name="Acme  Blender  3000", price=42.0)],
+                           name="BetaMart"), "blender")
+
+    assert r["matched"] == 1 and r["added"] == 0
+    assert conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"] == 1
+
+    pid = conn.execute("SELECT id FROM products").fetchone()["id"]
+    analysis = engines.analyze(conn, pid)
+    assert {o["retailer"] for o in analysis["offers"]} == {"AlphaMart", "BetaMart"}
+    assert analysis["best_price"] == 42.0
+    assert analysis["best_retailer"] == "BetaMart"
+
+
+def test_cross_provider_match_skips_seed_catalog():
+    """Live matching must not merge into curated seed products."""
+    conn = make_conn()
+    conn.execute("INSERT INTO products (name, norm_name) VALUES ('Acme Blender 3000', NULL)")
+    conn.commit()
+    ingest.ingest_search(
+        conn, FakeProvider([_lp(external_id="a1", name="Acme Blender 3000")], name="AlphaMart"),
+        "blender")
+    # Seed row (1) + new live row (1) = 2; the live one did not merge into seed.
+    assert conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"] == 2
 
 
 def test_ingested_product_flows_through_engine():
@@ -143,13 +216,14 @@ def client(tmp_path_factory, monkeypatch):
 def test_api_list_retailers(client):
     r = client.get("/api/retailers")
     assert r.status_code == 200
-    assert r.json()["providers"][0]["name"] == "DummyJSON"
+    names = [p["name"] for p in r.json()["providers"]]
+    assert "DummyJSON" in names and "FakeStore" in names
 
 
 def test_api_ingest_with_fake_provider(client, monkeypatch):
     from app import retailers
-    monkeypatch.setattr(retailers, "default_provider",
-                        lambda: FakeProvider([_lp(external_id="100", name="Live Gadget")]))
+    monkeypatch.setattr(retailers, "get_provider",
+                        lambda name=None: FakeProvider([_lp(external_id="100", name="Live Gadget")]))
     r = client.post("/api/retailers/ingest", json={"query": "gadget", "limit": 5})
     assert r.status_code == 200
     body = r.json()
@@ -158,6 +232,26 @@ def test_api_ingest_with_fake_provider(client, monkeypatch):
     # It is now searchable through the normal catalog API.
     s = client.get("/api/products", params={"q": "Live Gadget"})
     assert any("Live Gadget" in p["name"] for p in s.json()["results"])
+
+
+def test_api_ingest_provider_selection(client, monkeypatch):
+    from app import retailers
+    captured = {}
+
+    def fake_get(name=None):
+        captured["name"] = name
+        return FakeProvider([_lp(external_id="200", name="Sel Gadget")], name="ChosenMart")
+
+    monkeypatch.setattr(retailers, "get_provider", fake_get)
+    r = client.post("/api/retailers/ingest", json={"query": "x", "provider": "ChosenMart"})
+    assert r.status_code == 200
+    assert captured["name"] == "ChosenMart"
+    assert r.json()["retailer"] == "ChosenMart"
+
+
+def test_api_ingest_unknown_provider_400(client):
+    r = client.post("/api/retailers/ingest", json={"query": "x", "provider": "DoesNotExist"})
+    assert r.status_code == 400
 
 
 def test_api_ingest_rejects_empty_query(client):
@@ -173,6 +267,6 @@ def test_api_ingest_returns_502_on_provider_error(client, monkeypatch):
         def search(self, query, limit=10):
             raise RuntimeError("network down")
 
-    monkeypatch.setattr(retailers, "default_provider", lambda: _Boom())
+    monkeypatch.setattr(retailers, "get_provider", lambda name=None: _Boom())
     r = client.post("/api/retailers/ingest", json={"query": "x"})
     assert r.status_code == 502

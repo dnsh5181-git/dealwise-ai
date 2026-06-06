@@ -156,25 +156,32 @@ rewrites tone; every number still comes from the grounded payload.
 ### `GET /api/retailers`
 Lists configured retailer providers.
 ```json
-{ "providers": [ { "name": "DummyJSON", "live": true } ] }
+{ "providers": [ { "name": "DummyJSON", "live": true },
+                 { "name": "FakeStore", "live": true } ] }
 ```
 
 ### `POST /api/retailers/ingest`
-Fetches live offers for a query from the configured provider and upserts them
-into the catalog (deduped by `source` + provider id; each call records a fresh
-timestamped price). Makes an outbound HTTP call.
+Fetches live offers for a query from the chosen `provider` (default if omitted)
+and upserts them into the catalog. Makes an outbound HTTP call.
+
+Dedupe/match per product:
+- **updated** — same provider re-ingesting its own product (by provider id),
+- **matched** — same product from a *different* retailer (by normalized name) —
+  its price joins the existing entry for a cross-retailer comparison,
+- **added** — a new product. Each call records a fresh timestamped price.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
-  -H "Content-Type: application/json" -d '{"query":"laptop","limit":10}'
+  -H "Content-Type: application/json" \
+  -d '{"query":"laptop","limit":10,"provider":"DummyJSON"}'
 ```
 ```json
 { "retailer": "DummyJSON", "query": "laptop", "fetched": 10,
-  "added": 8, "updated": 2, "product_ids": [9, 10, 11, "..."] }
+  "added": 8, "updated": 1, "matched": 1, "product_ids": [9, 10, "..."] }
 ```
-`limit` is 1–50 (default 10); empty `query` returns `422`. On any provider
-failure (network/parse) returns `502` and leaves the catalog unchanged.
-Ingested products are immediately searchable via `GET /api/products`.
+`limit` is 1–50 (default 10); empty `query` → `422`; unknown `provider` → `400`;
+provider/network failure → `502` (catalog unchanged). Ingested products are
+immediately searchable via `GET /api/products`.
 
 ---
 

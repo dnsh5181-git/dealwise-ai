@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS products (
     barcode         TEXT,
     source          TEXT,            -- provider name for live-ingested products (NULL for seed)
     external_id     TEXT,            -- provider's product id, for dedupe across ingests
+    norm_name       TEXT,            -- normalized name, for matching the same product across retailers
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
@@ -109,8 +110,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE products ADD COLUMN source TEXT")
     if "external_id" not in cols:
         conn.execute("ALTER TABLE products ADD COLUMN external_id TEXT")
+    if "norm_name" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN norm_name TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_products_source ON products(source, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_products_norm ON products(norm_name)"
     )
 
 

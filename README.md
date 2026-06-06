@@ -98,23 +98,29 @@ See [`docs/API.md`](docs/API.md) for the full reference.
 
 Most of the catalog is seeded with 90 days of synthetic history (for a rich
 deal-score demo). You can also pull **real** products and prices over HTTP via the
-retailer-provider abstraction (`app/retailers/`). The first provider is
-[DummyJSON](https://dummyjson.com) — a public, key-free commerce API standing in
-for a real retailer; a production integration (Amazon PA-API, Walmart, Best Buy)
-is just another class implementing the same `search()` interface.
+retailer-provider abstraction (`app/retailers/`). Two providers ship today —
+[DummyJSON](https://dummyjson.com) and [Fake Store](https://fakestoreapi.com),
+both public key-free commerce APIs standing in for real retailers. Adding a
+production retailer (Amazon PA-API, Walmart, Best Buy) is just another class
+implementing the same `search()` interface — nothing else changes.
 
-Open **/retailers** and fetch a query (e.g. "phone"), or use the API:
+Open **/retailers**, pick a provider, and fetch a query (e.g. "phone"), or use the API:
 
 ```bash
+curl "http://127.0.0.1:8000/api/retailers"     # list providers
 curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
-  -H "Content-Type: application/json" -d '{"query":"laptop","limit":10}'
+  -H "Content-Type: application/json" \
+  -d '{"query":"laptop","limit":10,"provider":"DummyJSON"}'
 ```
 
 Ingested products land in the same tables and run through the same engines, so
 they immediately appear in Search. Each ingest records a fresh timestamped price,
 so repeated fetches accumulate real price history — which is what sharpens the
-deal score over time. Failures (network/parse) return `502` and leave the catalog
-untouched.
+deal score over time. **When the same product is seen at two retailers** (matched
+by normalized name across live providers) the prices merge into one entry, giving
+a real multi-retailer comparison — a simple stand-in for the production canonical
+product graph. Unknown provider → `400`; network/parse failure → `502` with the
+catalog left untouched.
 
 ## Optional: AI narration
 

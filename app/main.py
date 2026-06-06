@@ -216,21 +216,26 @@ def api_assistant(body: AssistantIn):
 class IngestIn(BaseModel):
     query: str = Field(min_length=1)
     limit: int = Field(default=10, ge=1, le=50)
+    provider: str | None = None
 
 
 @app.get("/api/retailers")
 def api_retailers():
-    return {"providers": [{"name": retailers.default_provider().name, "live": True}]}
+    return {"providers": [{"name": name, "live": True} for name in retailers.available()]}
 
 
 @app.post("/api/retailers/ingest")
 def api_ingest(body: IngestIn):
     """Fetch live offers for a query and ingest them into the catalog.
 
-    Makes an outbound HTTP call to the configured retailer provider. On any
-    failure (network, parse) returns 502 rather than corrupting the catalog.
+    Makes an outbound HTTP call to the chosen retailer provider (default if
+    unspecified). Unknown provider -> 400; provider/network failure -> 502 with
+    the catalog left untouched.
     """
-    provider = retailers.default_provider()
+    try:
+        provider = retailers.get_provider(body.provider)
+    except KeyError:
+        raise HTTPException(400, f"Unknown provider: {body.provider}") from None
     try:
         with db.get_conn() as conn:
             return ingest.ingest_search(conn, provider, body.query, body.limit)
@@ -273,15 +278,18 @@ def assistant_page(request: Request, q: str | None = None):
 
 
 @app.get("/retailers", response_class=HTMLResponse)
-def retailers_page(request: Request, q: str | None = None):
-    provider = retailers.default_provider()
+def retailers_page(request: Request, q: str | None = None, provider: str | None = None):
+    try:
+        prov = retailers.get_provider(provider)
+    except KeyError:
+        prov = retailers.default_provider()
     summary = None
     error = None
     cards = []
     if q:
         try:
             with db.get_conn() as conn:
-                summary = ingest.ingest_search(conn, provider, q, 12)
+                summary = ingest.ingest_search(conn, prov, q, 12)
                 for pid in summary["product_ids"]:
                     row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
                     if row:
@@ -289,8 +297,8 @@ def retailers_page(request: Request, q: str | None = None):
         except Exception as exc:
             error = str(exc)
     return templates.TemplateResponse(request, "retailers.html", {
-        "q": q or "", "summary": summary, "error": error,
-        "cards": cards, "provider": provider.name,
+        "q": q or "", "summary": summary, "error": error, "cards": cards,
+        "providers": retailers.available(), "selected": prov.name,
     })
 
 

@@ -19,7 +19,10 @@ from . import get_provider, ingest
 STARTER_QUERIES = [
     "air fryer",
     "65 inch tv",
+    "4k tv",
     "laptop",
+    "tablet",
+    "smartphone",
     "headphones",
     "robot vacuum",
     "smart watch",

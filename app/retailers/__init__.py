@@ -14,8 +14,8 @@ from .fakestore import FakeStoreProvider
 from .serper import GoogleShoppingProvider
 
 _PROVIDERS: dict[str, type[RetailerProvider]] = {
-    "eBay": EbayProvider,
     "GoogleShopping": GoogleShoppingProvider,
+    "eBay": EbayProvider,
     "BestBuy": BestBuyProvider,
     "DummyJSON": DummyJSONProvider,
     "FakeStore": FakeStoreProvider,
@@ -24,9 +24,11 @@ _PROVIDERS: dict[str, type[RetailerProvider]] = {
 # Real retailers vs. demo/testing APIs (surfaced in the UI so nothing fake looks real).
 _DEMO_PROVIDERS = {"DummyJSON", "FakeStore"}
 
-# eBay is the default real source for v1 (free Developer Program accepts personal
-# email; Best Buy requires a business-domain email for its key).
-DEFAULT_PROVIDER = "eBay"
+# Google Shopping (Serper) is the default real source: one key aggregates many US
+# stores (Walmart/Target/Amazon/Best Buy/…). eBay and Best Buy remain available
+# for anyone with those keys. (eBay's free Developer Program can reject personal
+# registrations, so it's no longer the default.)
+DEFAULT_PROVIDER = "GoogleShopping"
 
 
 def available() -> list[str]:

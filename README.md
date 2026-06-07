@@ -103,40 +103,40 @@ See [`docs/API.md`](docs/API.md) for the full reference.
 > synthetic price history, for an offline demo. Items show a "Sample data" tag.
 > To get **real US prices, images, and model numbers**, ingest from Best Buy.
 
-The retailer-provider abstraction (`app/retailers/`) ships four providers:
+The retailer-provider abstraction (`app/retailers/`) ships several providers:
 
 | Provider | Type | Data |
 |---|---|---|
-| **eBay** (default) | **real** | Live US marketplace prices + images via the Browse API. Free Developer Program — **accepts a personal email** |
+| **GoogleShopping** (default) | **real** | Aggregates real offers from **many US stores** (Walmart, Target, Amazon, Best Buy, …) in one call via [Serper](https://serper.dev). Free tier ~2,500 queries/mo |
+| eBay | real | Live US marketplace prices + images via the Browse API (free Developer Program; **may reject personal-email registrations**) |
 | BestBuy | real | Live US retail prices, images, model numbers. Free API, but **requires a business/custom-domain email** |
 | DummyJSON, FakeStore | demo | Public test APIs — fake catalogs, clearly labeled "(demo)" |
 
-Adding more retailers (Amazon, Walmart, …) is just another class implementing the
-same `search()` interface — nothing else changes.
+Adding more retailers is just another class implementing the same `search()`
+interface — nothing else changes.
 
-**Get real data (eBay — free, works with a personal email):**
-1. Create a free app at https://developer.ebay.com, then copy your **production**
-   keyset into `.env`:
+**Get real data (Google Shopping — one key, many stores):**
+1. Get a free key at https://serper.dev, then add it to `.env`:
    ```ini
-   EBAY_CLIENT_ID=...        # App ID
-   EBAY_CLIENT_SECRET=...    # Cert ID
+   SERPER_API_KEY=...
    ```
 2. Bootstrap a real starter catalog (uses the default provider):
    ```bash
    python -m app.retailers.bootstrap
    ```
 3. Search and product pages now show real listings with prices, images, and a
-   **"Buy at eBay"** link-out (the affiliate seam — add your eBay Partner Network
-   tag later). Or fetch ad-hoc on **/retailers**.
+   per-offer **"Check price at <retailer>"** link-out. Or fetch ad-hoc on
+   **/retailers**.
 
-> Best Buy works the same way once you have a business-domain email for its key
-> (`BESTBUY_API_KEY`); then pass `"provider":"BestBuy"`.
+> eBay and Best Buy work the same way once you have their keys
+> (`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`, `BESTBUY_API_KEY`); pass e.g.
+> `"provider":"eBay"`.
 
 ```bash
 curl "http://127.0.0.1:8000/api/retailers"     # lists providers + demo flags
 curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
   -H "Content-Type: application/json" \
-  -d '{"query":"air fryer","limit":10,"provider":"eBay"}'
+  -d '{"query":"air fryer","limit":10,"provider":"GoogleShopping"}'
 ```
 
 Ingested products land in the same tables and run through the same engines. Each

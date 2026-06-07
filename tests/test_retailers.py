@@ -292,9 +292,9 @@ def test_serper_cleans_marketplace_seller(monkeypatch):
 def test_registry_lists_providers_and_default_is_real():
     from app import retailers
     assert {"eBay", "GoogleShopping", "BestBuy", "DummyJSON", "FakeStore"} <= set(retailers.available())
-    assert retailers.DEFAULT_PROVIDER == "eBay"
-    assert retailers.get_provider().name == "eBay"
-    assert retailers.get_provider("GoogleShopping").name == "GoogleShopping"
+    assert retailers.DEFAULT_PROVIDER == "GoogleShopping"
+    assert retailers.get_provider().name == "GoogleShopping"
+    assert retailers.get_provider("eBay").name == "eBay"
     assert retailers.is_demo("DummyJSON") and retailers.is_demo("FakeStore")
     assert not retailers.is_demo("eBay")
     assert not retailers.is_demo("GoogleShopping")

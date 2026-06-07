@@ -131,7 +131,173 @@
     });
   }
 
+  // ---- Voice search (Web Speech API) --------------------------------------
+  function wireVoice() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    document.querySelectorAll("[data-voice]").forEach(function (btn) {
+      if (!SR) { btn.style.display = "none"; return; }  // unsupported browser
+      var input = document.querySelector(btn.getAttribute("data-voice"));
+      if (!input) return;
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        var rec = new SR();
+        rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+        var prev = input.placeholder;
+        btn.classList.add("listening"); input.placeholder = "Listening…";
+        rec.onresult = function (ev) {
+          input.value = ev.results[0][0].transcript;
+          var form = input.closest("form");
+          if (form) form.submit();
+        };
+        rec.onend = function () { btn.classList.remove("listening"); input.placeholder = prev; };
+        rec.onerror = function () { btn.classList.remove("listening"); input.placeholder = prev; };
+        try { rec.start(); } catch (e) {}
+      });
+    });
+  }
+
+  // ---- Camera barcode scanner (BarcodeDetector API) ------------------------
+  function wireScanner() {
+    var openers = document.querySelectorAll("[data-scan]");
+    var modal = document.getElementById("scanner-modal");
+    if (!openers.length || !modal) return;
+    var video = document.getElementById("scanner-video");
+    var statusEl = document.getElementById("scanner-status");
+    var closeBtn = document.getElementById("scanner-close");
+    var stream = null, detector = null, raf = null, stopped = true, lastMiss = "";
+
+    function setStatus(m) { if (statusEl) statusEl.textContent = m; }
+    function stop() {
+      stopped = true;
+      if (raf) cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+      stream = null; modal.classList.remove("open");
+    }
+    function loop() {
+      if (stopped) return;
+      detector.detect(video).then(function (codes) {
+        if (codes && codes.length) { lookup(codes[0].rawValue); return; }
+        raf = requestAnimationFrame(loop);
+      }).catch(function () { raf = requestAnimationFrame(loop); });
+    }
+    function lookup(code) {
+      if (code === lastMiss) { raf = requestAnimationFrame(loop); return; }  // avoid re-hammering
+      setStatus("Found " + code + " — looking up…");
+      fetch("/api/barcode/" + encodeURIComponent(code))
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (d) { stop(); location.href = "/product/" + d.product.id; })
+        .catch(function (st) {
+          lastMiss = code;
+          setStatus(st === 404 ? "No catalog match for " + code + ". Keep scanning or use search." : "Lookup error.");
+          raf = requestAnimationFrame(loop);
+        });
+    }
+    function start() {
+      stopped = false; lastMiss = ""; modal.classList.add("open");
+      if (!("BarcodeDetector" in window)) {
+        setStatus("This browser can't scan live. Try Chrome on Android, or type the barcode in search.");
+        return;
+      }
+      detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(function (s) {
+          stream = s; video.srcObject = s;
+          return video.play();
+        })
+        .then(function () { setStatus("Point your camera at a barcode…"); loop(); })
+        .catch(function (err) { setStatus("Camera unavailable: " + err.message); });
+    }
+    openers.forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); start(); }); });
+    if (closeBtn) closeBtn.addEventListener("click", stop);
+    modal.addEventListener("click", function (e) { if (e.target === modal) stop(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && modal.classList.contains("open")) stop(); });
+  }
+
+  // ---- Photo / visual search (canvas downscale -> Claude vision) -----------
+  function downscale(file, max, cb) {
+    var img = new Image();
+    img.onload = function () {
+      var scale = Math.min(1, max / Math.max(img.width, img.height));
+      var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      cb(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = function () { cb(null); };
+    img.src = URL.createObjectURL(file);
+  }
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  }); }
+
+  function wirePhoto() {
+    var openers = document.querySelectorAll("[data-photo]");
+    var input = document.getElementById("photo-input");
+    var modal = document.getElementById("photo-modal");
+    var body = document.getElementById("photo-body");
+    var closeBtn = document.getElementById("photo-close");
+    if (!openers.length || !input || !modal || !body) return;
+
+    function setBody(html) { body.innerHTML = html; }
+    function open() { modal.classList.add("open"); }
+    function close() { modal.classList.remove("open"); input.value = ""; }
+
+    function card(c) {
+      var price = c.best_price != null ? "$" + c.best_price.toFixed(2) + " at " + esc(c.best_retailer) : "—";
+      var img = c.image_url
+        ? '<img src="' + esc(c.image_url) + '" alt="" loading="lazy"/>'
+        : '<span class="ph">' + esc((c.name || "?").charAt(0).toUpperCase()) + "</span>";
+      return '<a class="ps-card" href="/product/' + c.id + '">' +
+        '<div class="ps-thumb">' + img + "</div>" +
+        '<div class="ps-info"><strong>' + esc(c.name) + "</strong>" +
+        '<span class="muted small">' + esc(c.brand) + "</span>" +
+        '<span class="ps-price">' + price + "</span></div></a>";
+    }
+
+    function render(d) {
+      var id = d.identified || {};
+      if (!id.ok) {
+        setBody('<p class="ps-status">' + esc(id.reason || "Couldn't identify that photo.") +
+          '</p><a class="btn-lite" href="/">Back to search</a>');
+        return;
+      }
+      var conf = id.confidence ? " · " + id.confidence + "% sure" : "";
+      var head = '<div class="ps-head">Looks like <strong>' + esc(id.name || id.query) +
+        "</strong>" + '<span class="muted small">matched “' + esc(id.query) + '”' + conf + "</span></div>";
+      var cta = '<a class="btn-lite" href="/?q=' + encodeURIComponent(id.query) + '">See all results for “' + esc(id.query) + '” →</a>';
+      if (!d.results || !d.results.length) {
+        setBody(head + '<p class="ps-status">No catalog matches yet. ' + cta + "</p>");
+        return;
+      }
+      setBody(head + '<div class="ps-grid">' + d.results.slice(0, 6).map(card).join("") + "</div>" + cta);
+    }
+
+    openers.forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); input.click(); }); });
+    if (closeBtn) closeBtn.addEventListener("click", close);
+    modal.addEventListener("click", function (e) { if (e.target === modal) close(); });
+
+    input.addEventListener("change", function () {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      open(); setBody('<p class="ps-status"><span class="spin"></span> Reading photo…</p>');
+      downscale(file, 1024, function (dataUrl) {
+        if (!dataUrl) { setBody('<p class="ps-status">Could not read that image.</p>'); return; }
+        var b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+        setBody('<p class="ps-status"><span class="spin"></span> Identifying product with AI…</p>');
+        fetch("/api/visual-search", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: b64, media_type: "image/jpeg" }),
+        }).then(function (r) { return r.json(); })
+          .then(render)
+          .catch(function () { setBody('<p class="ps-status">Something went wrong. Please try again.</p>'); });
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initTheme(); tint(); wireHearts(); wireShare(); wirePresets(); wireSubmitStates();
+    wireVoice(); wireScanner(); wirePhoto();
   });
 })();

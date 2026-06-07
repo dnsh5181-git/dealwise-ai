@@ -5,8 +5,12 @@
   <h1>Ask DealWise</h1>
   <p class="sub">Natural-language shopping answers grounded in real platform data — prices, deal scores, and buy-now calls. No made-up numbers.</p>
   <form class="search" action="/assistant" method="get">
-    <input type="text" name="q" value="{{ q }}" placeholder="e.g. What is the best air fryer under $100?" autofocus />
+    <input id="q" type="text" name="q" value="{{ q }}" placeholder="e.g. What is the best air fryer under $100?" autofocus />
+    <button class="mic" type="button" data-voice="#q" aria-label="Ask by voice" title="Ask by voice">🎤</button>
     <button type="submit">Ask</button>
+    <label class="live-toggle" title="Pull real eBay listings into the answer">
+      <input type="checkbox" name="live" value="true" {{ 'checked' if live }} /> 🔴 Live
+    </label>
   </form>
   <div class="chips">
     {% for ex in examples %}

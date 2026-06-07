@@ -4,9 +4,16 @@
   <h1>The Bloomberg Terminal<br/>for shopping.</h1>
   <p class="sub">Search any product to see the lowest price, a 0–100 deal score, and an AI buy-now call backed by 90 days of price history.</p>
   <form class="search" action="/" method="get">
-    <input type="text" name="q" value="{{ q }}" placeholder="Search “Ninja Air Fryer”, “PlayStation 5”, “Dyson”…" autofocus />
+    <input id="q" type="text" name="q" value="{{ q }}" placeholder="Search “Ninja Air Fryer”, “PlayStation 5”, “Dyson”…" autofocus />
+    <button class="mic" type="button" data-voice="#q" aria-label="Search by voice" title="Search by voice">🎤</button>
     <button type="submit">Search</button>
   </form>
+  <div class="tools">
+    <button type="button" class="tool" data-scan aria-label="Scan a barcode">📷 Scan barcode</button>
+    <button type="button" class="tool" data-photo aria-label="Search by photo">🖼️ Search by photo</button>
+    <span class="tool-hint muted small">or tap 🎤 to speak your search</span>
+  </div>
+  <input id="photo-input" type="file" accept="image/*" capture="environment" hidden />
   <div class="chips">
     <a class="chip {{ 'on' if not active_category }}" href="/">All</a>
     {% for c in categories %}
@@ -51,6 +58,32 @@
   <p class="empty">No products match “{{ q }}”. Try “air fryer”, “TV”, or “watch”.</p>
   {% endfor %}
 </section>
+
+<!-- Camera barcode scanner -->
+<div id="scanner-modal" class="modal" aria-hidden="true">
+  <div class="modal-box">
+    <div class="modal-head">
+      <strong>📷 Scan a barcode</strong>
+      <button id="scanner-close" class="modal-x" type="button" aria-label="Close">✕</button>
+    </div>
+    <div class="scanner-stage">
+      <video id="scanner-video" playsinline muted></video>
+      <div class="scanner-reticle"></div>
+    </div>
+    <p id="scanner-status" class="muted small">Starting camera…</p>
+  </div>
+</div>
+
+<!-- Photo / visual search -->
+<div id="photo-modal" class="modal" aria-hidden="true">
+  <div class="modal-box">
+    <div class="modal-head">
+      <strong>🖼️ Visual search</strong>
+      <button id="photo-close" class="modal-x" type="button" aria-label="Close">✕</button>
+    </div>
+    <div id="photo-body"></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

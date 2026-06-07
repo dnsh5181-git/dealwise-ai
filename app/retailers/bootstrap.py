@@ -13,6 +13,7 @@ from __future__ import annotations
 import sys
 
 from .. import db
+from ..config import load_dotenv
 from . import get_provider, ingest
 
 STARTER_QUERIES = [
@@ -26,6 +27,7 @@ STARTER_QUERIES = [
 
 
 def main() -> int:
+    load_dotenv()  # so the CLI picks up SERPER_API_KEY / provider keys from .env
     db.init_db()
     provider = get_provider()  # the default real provider
     totals = {"added": 0, "updated": 0, "matched": 0}

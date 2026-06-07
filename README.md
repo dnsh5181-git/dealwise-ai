@@ -141,11 +141,31 @@ curl -X POST http://127.0.0.1:8000/api/retailers/ingest \
 
 Ingested products land in the same tables and run through the same engines. Each
 ingest records a fresh timestamped price, so **repeated fetches accumulate real
-price history** — run `python -m app.retailers.refresh` on a schedule (see
-`.github/workflows/refresh.yml`) to build the history that makes the deal score
-meaningful. The same product seen at two retailers (matched by normalized name)
-merges into one multi-retailer comparison. Unknown provider → `400`;
-network/parse failure or missing key → `502`, catalog left untouched.
+price history** that makes the deal score meaningful. The same product seen at
+two retailers (matched by normalized name) merges into one multi-retailer
+comparison. Unknown provider → `400`; network/parse failure or missing key →
+`502`, catalog left untouched.
+
+### Daily price refresh
+
+`python -m app.retailers.refresh` re-ingests the tracked queries and records one
+fresh price point per product (it loads `.env`, so a headless/scheduled run picks
+up `SERPER_API_KEY`). It prefers Google Shopping when that key is set, else the
+registry default; with no usable key it no-ops (exit 0). Override the list with
+`DEALWISE_TRACKED="air fryer,4k tv"`.
+
+Schedule it so history accrues automatically:
+
+- **Windows** — `run_refresh.bat` is a ready runner; register it once:
+  ```bat
+  schtasks /Create /SC DAILY /ST 09:00 /TN "DealWise Daily Price Refresh" ^
+    /TR "C:\path\to\dealwise-ai\run_refresh.bat" /F
+  ```
+  (Runs when you're logged in; logs to `refresh.log`.)
+- **Linux/cron / app host** — `0 9 * * *  cd /path/to/dealwise-ai && .venv/bin/python -m app.retailers.refresh`
+- **GitHub Actions** — `.github/workflows/refresh.yml` runs the cadence and uploads
+  the DB as an artifact (its filesystem is ephemeral, so it doesn't persist
+  history; run on the app host for that). Set `SERPER_API_KEY` as a repo secret.
 
 **Not in v1 (deferred to a funded phase):** real *Amazon* prices/history (needs a
 paid Keepa key or an approved Amazon Associates account + PA-API), in-app

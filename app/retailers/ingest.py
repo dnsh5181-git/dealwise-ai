@@ -100,21 +100,39 @@ def _record_price(conn: sqlite3.Connection, product_id: int, retailer_id: int,
 
 def ingest_search(conn: sqlite3.Connection, provider: RetailerProvider,
                   query: str, limit: int = 10) -> dict[str, Any]:
-    """Fetch live offers for ``query`` and upsert them. Returns a summary."""
+    """Fetch live offers for ``query`` and upsert them. Returns a summary.
+
+    A price is attributed to ``lp.retailer`` when the offer carries one (an
+    aggregator like Google Shopping returns offers from many stores in a single
+    response); otherwise it falls back to the provider's own name. ``source``
+    (used for dedupe) stays the provider name either way — it records *where the
+    data came from*, distinct from *which store sells it*.
+    """
     products = provider.search(query, limit)
-    retailer_id = _ensure_retailer(conn, provider.name)
+    retailer_ids: dict[str, int] = {}  # store name -> retailers.id (cached per call)
+
+    def retailer_id_for(store: str) -> int:
+        rid = retailer_ids.get(store)
+        if rid is None:
+            rid = _ensure_retailer(conn, store)
+            retailer_ids[store] = rid
+        return rid
 
     counts = {"added": 0, "updated": 0, "matched": 0}
     product_ids: list[int] = []
+    stores: set[str] = set()
     for lp in products:
         pid, status = _upsert_product(conn, provider.name, lp)
-        _record_price(conn, pid, retailer_id, lp.price, lp.in_stock)
+        store = lp.retailer or provider.name
+        _record_price(conn, pid, retailer_id_for(store), lp.price, lp.in_stock)
         product_ids.append(pid)
+        stores.add(store)
         counts[status] += 1
 
     conn.commit()
     return {
         "retailer": provider.name,
+        "stores": sorted(stores),
         "query": query,
         "fetched": len(products),
         **counts,

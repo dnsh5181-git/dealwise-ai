@@ -332,3 +332,55 @@ footer {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 480px) { .ps-grid { grid-template-columns: 1fr; } }
+
+/* ---- Search autocomplete (typeahead) ------------------------------------ */
+.ac-wrap { position: relative; flex: 1; display: block; }
+.ac-wrap > #q, .ac-wrap > input { width: 100%; }
+.ac-list {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px);
+  margin: 0; padding: 6px; list-style: none; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  max-height: 320px; overflow: auto;
+}
+.ac-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; border-radius: 8px; cursor: pointer; font-size: .95rem;
+}
+.ac-item:hover, .ac-item.on { background: var(--bg); }
+.ac-kind {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+  padding: 2px 7px; border-radius: 999px; flex: none;
+}
+.live-note { max-width: 1080px; margin: 0 auto 4px; padding: 0 24px; }
+
+/* ---- Product specifications --------------------------------------------- */
+.specs-summary { margin: 0 0 14px; color: var(--ink); }
+.specs-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+.specs-group h3 {
+  font-size: .8rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin: 0 0 6px; font-weight: 700;
+}
+.specs-group dl { margin: 0; }
+.spec-row {
+  display: flex; justify-content: space-between; gap: 14px;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.spec-row dt { color: var(--muted); }
+.spec-row dd { margin: 0; font-weight: 600; text-align: right; }
+.specs-skeleton { height: 120px; border-radius: 12px; }
+
+@media (max-width: 640px) { .specs-groups { grid-template-columns: 1fr; } }
+
+/* ---- Sort bar ----------------------------------------------------------- */
+.sort-bar {
+  max-width: 1080px; margin: 8px auto 0; padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.sort-form { display: flex; align-items: center; gap: 8px; }
+.sort-form select {
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink); font-size: .9rem; cursor: pointer; outline: none;
+}
+.sort-form select:focus { border-color: var(--brand); }
+.sim-grid { margin-top: 4px; }

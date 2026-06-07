@@ -3,8 +3,12 @@
 <section class="hero">
   <h1>The Bloomberg Terminal<br/>for shopping.</h1>
   <p class="sub">Search any product to see the lowest price, a 0–100 deal score, and an AI buy-now call backed by 90 days of price history.</p>
-  <form class="search" action="/" method="get">
-    <input id="q" type="text" name="q" value="{{ q }}" placeholder="Search “Ninja Air Fryer”, “PlayStation 5”, “Dyson”…" autofocus />
+  <form class="search" action="/" method="get" autocomplete="off">
+    <span class="ac-wrap">
+      <input id="q" type="text" name="q" value="{{ q }}" placeholder="Search “Ninja Air Fryer”, “PlayStation 5”, “Dyson”…"
+             autofocus data-autocomplete role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="ac-list-q" />
+      <ul id="ac-list-q" class="ac-list" role="listbox" hidden></ul>
+    </span>
     <button class="mic" type="button" data-voice="#q" aria-label="Search by voice" title="Search by voice">🎤</button>
     <button type="submit">Search</button>
   </form>
@@ -22,6 +26,26 @@
   </div>
   <p class="muted small" style="margin-top:14px">Items marked “Sample data” are demo placeholders. Fetch real US prices on <a href="/retailers">Live Data</a> — eBay, or Google Shopping for Walmart/Target/Amazon offers.</p>
 </section>
+
+{% if fetched_live %}
+<p class="muted small live-note">🔴 Fetched {{ fetched_live }} live result{{ 's' if fetched_live != 1 }} from Google Shopping for “{{ q }}”.</p>
+{% endif %}
+
+{% if cards %}
+<div class="sort-bar">
+  <span class="muted small">{{ cards|length }} result{{ 's' if cards|length != 1 }}{% if q %} for “{{ q }}”{% endif %}</span>
+  <form class="sort-form" method="get" action="/">
+    {% if q %}<input type="hidden" name="q" value="{{ q }}" />{% endif %}
+    {% if active_category %}<input type="hidden" name="category" value="{{ active_category }}" />{% endif %}
+    <label class="muted small" for="sort">Sort</label>
+    <select id="sort" name="sort" onchange="this.form.submit()">
+      {% for val, label in sort_options %}
+        <option value="{{ val }}" {{ 'selected' if active_sort == val }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+{% endif %}
 
 <section class="grid">
   {% for c in cards %}

@@ -78,6 +78,13 @@
 </section>
 
 <section class="panel">
+  <h2>Specifications</h2>
+  <div id="specs" data-pid="{{ p.id }}">
+    <div class="specs-skeleton skeleton"></div>
+  </div>
+</section>
+
+<section class="panel">
   <h2>Price history</h2>
   <div id="chart" data-pid="{{ p.id }}">
     <div class="chart-skeleton skeleton"></div>
@@ -88,6 +95,9 @@
     <span>High ${{ '%.2f'|format(a.high_90d) }}</span>
     <span class="muted">14-day trend {{ a.trend_pct_14d }}%</span>
   </div>
+  {% if p.source %}
+  <p class="muted small">History before today is a modeled baseline anchored on the current price; real points accrue daily as prices are tracked.</p>
+  {% endif %}
 </section>
 
 <section class="panel">
@@ -138,6 +148,36 @@
     {% endfor %}
   </section>
 </div>
+
+{% if similar %}
+<section class="panel">
+  <h2>Similar products</h2>
+  <div class="grid sim-grid">
+    {% for c in similar %}
+    <a class="card" href="/product/{{ c.id }}" data-card>
+      <div class="thumb">
+        {% if c.image_url %}<img src="{{ c.image_url }}" alt="{{ c.name }}" loading="lazy" />
+        {% else %}<span class="ph">{{ c.name[:1]|upper }}</span>{% endif %}
+      </div>
+      <div class="card-top">
+        <span class="brand-tag">{{ c.brand }}</span>
+        {% if c.recommendation %}<span class="rec rec-{{ c.recommendation|replace(' ','')|lower }}">{{ c.recommendation }}</span>{% endif %}
+      </div>
+      <h3>{{ c.name }}</h3>
+      <div class="price-row">
+        <div>
+          <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>
+          <div class="muted small">at {{ c.best_retailer }}</div>
+        </div>
+        <div class="score-badge" data-score="{{ c.deal_score }}">
+          <strong>{{ c.deal_score }}</strong><span>deal</span>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="panel">
   <h2>Set a price alert</h2>
@@ -250,6 +290,39 @@
         render();
       })
       .catch(function () { box.textContent = 'Could not load price history.'; });
+  })();
+
+  // AI-generated specifications (lazy-loaded + cached server-side after first view).
+  (function () {
+    var box = document.getElementById('specs');
+    if (!box) return;
+    var pid = box.dataset.pid;
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+      });
+    }
+    fetch('/api/products/' + pid + '/specs')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.available) {
+          box.innerHTML = '<p class="muted small">' + esc(d.reason || 'No specifications available.') + '</p>';
+          return;
+        }
+        var html = '';
+        if (d.summary) html += '<p class="specs-summary">' + esc(d.summary) + '</p>';
+        html += '<div class="specs-groups">';
+        (d.groups || []).forEach(function (g) {
+          html += '<div class="specs-group"><h3>' + esc(g.name) + '</h3><dl>';
+          (g.specs || []).forEach(function (s) {
+            html += '<div class="spec-row"><dt>' + esc(s.label) + '</dt><dd>' + esc(s.value) + '</dd></div>';
+          });
+          html += '</dl></div>';
+        });
+        html += '</div><p class="muted small">Specs are AI-generated from the product name and may vary by configuration.</p>';
+        box.innerHTML = html;
+      })
+      .catch(function () { box.innerHTML = '<p class="muted small">Could not load specifications.</p>'; });
   })();
 </script>
 {% endblock %}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr, Field
 
-from . import assistant, db, engines, narrator, retailers, vision
+from . import assistant, db, engines, narrator, retailers, specs, vision
 from .retailers import ingest
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -69,9 +70,61 @@ def search_products(conn, q: str | None, category: str | None, limit: int = 50):
     return conn.execute(sql, params).fetchall()
 
 
+def preferred_live_provider():
+    """The best-coverage real provider that's actually configured. Google
+    Shopping (Serper) aggregates many US stores, so prefer it when its key is
+    set; otherwise fall back to the registry default (eBay)."""
+    if os.environ.get("SERPER_API_KEY"):
+        return retailers.get_provider("GoogleShopping")
+    return retailers.default_provider()
+
+
+_SIMILAR_STOP = {"the", "with", "and", "for", "new", "in", "of", "a", "to", "by", "inch"}
+
+
+def _name_tokens(name: str) -> set[str]:
+    return {t for t in re.findall(r"[a-z0-9]+", (name or "").lower())
+            if len(t) > 1 and t not in _SIMILAR_STOP}
+
+
+def find_similar(conn, product_id: int, limit: int = 6) -> list[dict]:
+    """Products related to ``product_id``: same category (or same brand), ranked
+    by shared name words + price proximity. Excludes the product itself."""
+    base = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    if not base:
+        return []
+    base_tokens = _name_tokens(base["name"])
+    base_analysis = engines.analyze(conn, product_id)
+    base_price = base_analysis["best_price"] if base_analysis else None
+
+    candidates = conn.execute(
+        """SELECT * FROM products
+           WHERE id != ? AND (category = ? OR brand = ?)
+           ORDER BY review_count DESC LIMIT 60""",
+        (product_id, base["category"], base["brand"]),
+    ).fetchall()
+
+    scored = []
+    for r in candidates:
+        card = product_card(conn, r)
+        if card["best_price"] is None:
+            continue
+        overlap = len(base_tokens & _name_tokens(r["name"]))
+        # Price proximity in [0,1]: 1 when identical, decaying with relative gap.
+        prox = 0.0
+        if base_price and card["best_price"]:
+            gap = abs(card["best_price"] - base_price) / base_price
+            prox = max(0.0, 1.0 - min(gap, 1.0))
+        same_brand = 1 if r["brand"] == base["brand"] and base["brand"] else 0
+        score = overlap * 2 + prox + same_brand
+        scored.append((score, card))
+    scored.sort(key=lambda sc: sc[0], reverse=True)
+    return [c for _, c in scored[:limit]]
+
+
 def live_ingest_best_effort(conn, query: str) -> int:
     """Best-effort: pull live offers for ``query`` into the catalog so grounded
-    features (assistant, visual search) can cite real retailer data.
+    features (search fallback, assistant, visual search) can use real retailer data.
 
     Returns the number of products ingested. Swallows provider/network errors
     (returns 0) so the caller always degrades to whatever is already in the
@@ -80,11 +133,47 @@ def live_ingest_best_effort(conn, query: str) -> int:
     if not query.strip():
         return 0
     try:
-        provider = retailers.default_provider()
-        summary = ingest.ingest_search(conn, provider, query, 10)
+        summary = ingest.ingest_search(conn, preferred_live_provider(), query, 10,
+                                       backfill_history=True)
         return len(summary.get("product_ids", []))
     except Exception:
         return 0
+
+
+SORT_OPTIONS = [
+    ("popularity", "Popularity"),
+    ("price_low", "Price: Low to High"),
+    ("price_high", "Price: High to Low"),
+    ("deal", "Best deal score"),
+    ("rating", "Top rated"),
+    ("name_az", "Name: A–Z"),
+    ("name_za", "Name: Z–A"),
+]
+_SORT_KEYS = {k for k, _ in SORT_OPTIONS}
+
+
+def sort_cards(cards: list[dict], sort: str | None) -> list[dict]:
+    """Order result cards by the chosen key. Unknown/None -> popularity.
+
+    Price/deal sorts run here (not in SQL) because those values are computed by
+    the engines per product, not stored on the row."""
+    sort = sort if sort in _SORT_KEYS else "popularity"
+    big = float("inf")
+    if sort == "price_low":
+        cards.sort(key=lambda c: (c["best_price"] is None, c["best_price"] if c["best_price"] is not None else big))
+    elif sort == "price_high":
+        cards.sort(key=lambda c: (c["best_price"] is not None, c["best_price"] or 0), reverse=True)
+    elif sort == "deal":
+        cards.sort(key=lambda c: (c["deal_score"] or 0), reverse=True)
+    elif sort == "rating":
+        cards.sort(key=lambda c: (c["rating"] or 0, c["review_count"] or 0), reverse=True)
+    elif sort == "name_az":
+        cards.sort(key=lambda c: c["name"].lower())
+    elif sort == "name_za":
+        cards.sort(key=lambda c: c["name"].lower(), reverse=True)
+    else:  # popularity
+        cards.sort(key=lambda c: (c["review_count"] or 0), reverse=True)
+    return cards
 
 
 def product_card(conn, row):
@@ -160,6 +249,60 @@ def api_history(product_id: int):
         if not series:
             raise HTTPException(404, "No price history")
         return {"product_id": product_id, "history": [{"date": d, "price": p} for d, p in series]}
+
+
+@app.get("/api/products/{product_id}/similar")
+def api_similar(product_id: int, limit: int = 6):
+    """Products similar to this one (same category/brand, related name + price)."""
+    with db.get_conn() as conn:
+        if not conn.execute("SELECT 1 FROM products WHERE id = ?", (product_id,)).fetchone():
+            raise HTTPException(404, "Product not found")
+        return {"product_id": product_id, "similar": find_similar(conn, product_id, limit)}
+
+
+@app.get("/api/products/{product_id}/specs")
+def api_specs(product_id: int):
+    """AI-generated specifications for a product (cached after first request)."""
+    with db.get_conn() as conn:
+        return specs.get_specs(conn, product_id)
+
+
+@app.get("/api/suggest")
+def api_suggest(q: str = "", limit: int = 8):
+    """Typeahead suggestions: catalog product names + brands + categories that
+    match the partial query. Powers the search-box autocomplete."""
+    term = (q or "").strip()
+    if len(term) < 2:
+        return {"q": term, "suggestions": []}
+    like = f"%{term}%"
+    starts = f"{term}%"
+    with db.get_conn() as conn:
+        # Product names first (prefix matches ranked above contains-matches),
+        # then distinct brands and categories that match.
+        rows = conn.execute(
+            """SELECT name AS text, 'product' AS kind,
+                      CASE WHEN name LIKE ? THEN 0 ELSE 1 END AS rank
+               FROM products
+               WHERE name LIKE ?
+               ORDER BY rank, review_count DESC
+               LIMIT ?""",
+            (starts, like, limit),
+        ).fetchall()
+        out = [{"text": r["text"], "kind": r["kind"]} for r in rows]
+        seen = {r["text"].lower() for r in rows}
+        for kind, col in (("brand", "brand"), ("category", "category")):
+            if len(out) >= limit:
+                break
+            extra = conn.execute(
+                f"SELECT DISTINCT {col} AS text FROM products "
+                f"WHERE {col} LIKE ? AND {col} IS NOT NULL AND {col} != '' LIMIT ?",
+                (like, limit),
+            ).fetchall()
+            for r in extra:
+                if r["text"] and r["text"].lower() not in seen:
+                    out.append({"text": r["text"], "kind": kind})
+                    seen.add(r["text"].lower())
+    return {"q": term, "suggestions": out[:limit]}
 
 
 @app.get("/api/barcode/{code}")
@@ -320,7 +463,8 @@ def api_ingest(body: IngestIn):
         raise HTTPException(400, f"Unknown provider: {body.provider}") from None
     try:
         with db.get_conn() as conn:
-            return ingest.ingest_search(conn, provider, body.query, body.limit)
+            return ingest.ingest_search(conn, provider, body.query, body.limit,
+                                        backfill_history=True)
     except Exception as exc:
         raise HTTPException(502, f"Live retailer fetch failed: {exc}") from exc
 
@@ -330,15 +474,26 @@ def api_ingest(body: IngestIn):
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, q: str | None = None, category: str | None = None):
+def home(request: Request, q: str | None = None, category: str | None = None,
+         sort: str | None = None):
+    fetched_live = 0
     with db.get_conn() as conn:
         rows = search_products(conn, q, category)
-        cards = [product_card(conn, r) for r in rows]
+        # If a real search returned nothing, fetch live from the best provider so
+        # the user always sees results (the "search anything" path). Only on a
+        # free-text query (not a category browse) to avoid surprise API calls.
+        if q and not category and not rows and os.environ.get("SERPER_API_KEY"):
+            fetched_live = live_ingest_best_effort(conn, q)
+            if fetched_live:
+                rows = search_products(conn, q, category)
+        cards = sort_cards([product_card(conn, r) for r in rows], sort)
         cats = [r["category"] for r in conn.execute(
             "SELECT DISTINCT category FROM products ORDER BY category").fetchall()]
     return templates.TemplateResponse(request, "index.html", {
         "cards": cards, "q": q or "",
         "categories": cats, "active_category": category,
+        "fetched_live": fetched_live,
+        "sort_options": SORT_OPTIONS, "active_sort": sort if sort in _SORT_KEYS else "popularity",
     })
 
 
@@ -373,7 +528,7 @@ def retailers_page(request: Request, q: str | None = None, provider: str | None 
     if q:
         try:
             with db.get_conn() as conn:
-                summary = ingest.ingest_search(conn, prov, q, 12)
+                summary = ingest.ingest_search(conn, prov, q, 12, backfill_history=True)
                 for pid in summary["product_ids"]:
                     row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
                     if row:
@@ -411,10 +566,12 @@ def product_page(request: Request, product_id: int):
                WHERE i.product_id = ? ORDER BY i.distance_mi ASC""",
             (product_id,),
         ).fetchall()
+        similar = find_similar(conn, product_id, limit=6)
     return templates.TemplateResponse(request, "product.html", {
         "p": row, "a": analysis,
         "coupons": coupons, "inventory": inventory,
         "nearby_count": sum(1 for i in inventory if i["in_stock"]),
+        "similar": similar,
     })
 
 

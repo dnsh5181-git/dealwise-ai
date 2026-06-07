@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr, Field
 
-from . import assistant, db, engines, narrator, retailers
+from . import assistant, db, engines, narrator, retailers, vision
 from .retailers import ingest
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -67,6 +67,24 @@ def search_products(conn, q: str | None, category: str | None, limit: int = 50):
     sql += " ORDER BY review_count DESC LIMIT ?"
     params.append(limit)
     return conn.execute(sql, params).fetchall()
+
+
+def live_ingest_best_effort(conn, query: str) -> int:
+    """Best-effort: pull live offers for ``query`` into the catalog so grounded
+    features (assistant, visual search) can cite real retailer data.
+
+    Returns the number of products ingested. Swallows provider/network errors
+    (returns 0) so the caller always degrades to whatever is already in the
+    catalog — live data is an enhancement, never a hard dependency.
+    """
+    if not query.strip():
+        return 0
+    try:
+        provider = retailers.default_provider()
+        summary = ingest.ingest_search(conn, provider, query, 10)
+        return len(summary.get("product_ids", []))
+    except Exception:
+        return 0
 
 
 def product_card(conn, row):
@@ -228,12 +246,48 @@ def api_check_alerts():
 
 class AssistantIn(BaseModel):
     query: str = Field(min_length=1)
+    live: bool = False
 
 
 @app.post("/api/assistant")
 def api_assistant(body: AssistantIn):
     with db.get_conn() as conn:
-        return narrator.narrate(assistant.answer(conn, body.query))
+        ingested = 0
+        if body.live:
+            ingested = live_ingest_best_effort(conn, body.query)
+        result = narrator.narrate(assistant.answer(conn, body.query))
+        return {**result, "live_ingested": ingested}
+
+
+# ----- Visual (photo) product search ----------------------------------------
+
+class VisualSearchIn(BaseModel):
+    image: str = Field(min_length=16)  # base64-encoded image (no data: prefix)
+    media_type: str = "image/jpeg"
+    live: bool = False
+
+
+@app.post("/api/visual-search")
+def api_visual_search(body: VisualSearchIn):
+    """Identify a product from a photo (Claude vision) and return matching
+    catalog products. Optionally pull live retailer offers for the match first.
+    """
+    ident = vision.identify(body.image, body.media_type)
+    if not ident.get("ok"):
+        return {"identified": ident, "count": 0, "results": []}
+    query = ident["query"]
+    with db.get_conn() as conn:
+        ingested = 0
+        if body.live:
+            ingested = live_ingest_best_effort(conn, query)
+        rows = search_products(conn, query, None, limit=24)
+        cards = [product_card(conn, r) for r in rows]
+    return {
+        "identified": ident,
+        "live_ingested": ingested,
+        "count": len(cards),
+        "results": cards,
+    }
 
 
 # ----- Live retailer integration --------------------------------------------
@@ -289,10 +343,12 @@ def home(request: Request, q: str | None = None, category: str | None = None):
 
 
 @app.get("/assistant", response_class=HTMLResponse)
-def assistant_page(request: Request, q: str | None = None):
+def assistant_page(request: Request, q: str | None = None, live: bool = False):
     result = None
     if q:
         with db.get_conn() as conn:
+            if live:
+                live_ingest_best_effort(conn, q)
             result = narrator.narrate(assistant.answer(conn, q))
     examples = [
         "What is the best air fryer under $100?",
@@ -301,7 +357,7 @@ def assistant_page(request: Request, q: str | None = None):
         "Which retailer gives the best deal for the Dyson?",
     ]
     return templates.TemplateResponse(request, "assistant.html", {
-        "q": q or "", "result": result, "examples": examples,
+        "q": q or "", "result": result, "examples": examples, "live": live,
     })
 
 

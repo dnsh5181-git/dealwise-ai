@@ -201,15 +201,66 @@ def test_ebay_missing_creds_raises(monkeypatch):
         ebay.EbayProvider().search("air fryer")
 
 
+# ----- Google Shopping aggregator (Serper) parsing (HTTP mocked) ------------
+
+def test_serper_parses_multi_store_offers(monkeypatch):
+    monkeypatch.setenv("SERPER_API_KEY", "test-key")
+    payload = {"shopping": [
+        {"title": "Ninja Air Fryer Pro", "source": "Walmart",
+         "link": "https://www.walmart.com/ip/123", "price": "$78.92",
+         "imageUrl": "https://i.example/x.jpg", "rating": 4.7,
+         "ratingCount": 1234, "productId": "1111"},
+        {"title": "Ninja Air Fryer Pro", "source": "Target",
+         "link": "https://www.target.com/p/456", "price": "$1,089.00",
+         "productId": "2222"},
+        {"title": "No Price Item", "source": "Amazon", "price": ""},  # dropped
+    ]}
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeResp(payload))
+    from app.retailers.serper import GoogleShoppingProvider
+    offers = GoogleShoppingProvider().search("air fryer")
+    assert len(offers) == 2                       # priceless offer filtered out
+    w = offers[0]
+    assert w.retailer == "Walmart"                # the real store, per-offer
+    assert w.external_id == "1111"
+    assert w.price == 78.92
+    assert w.review_count == 1234
+    assert w.url.startswith("https://www.walmart.com")
+    assert offers[1].retailer == "Target"
+    assert offers[1].price == 1089.0              # thousands separator parsed
+
+
+def test_serper_derives_id_when_missing(monkeypatch):
+    monkeypatch.setenv("SERPER_API_KEY", "k")
+    payload = {"shopping": [{"title": "Mystery Gadget", "source": "Costco", "price": "$9.99"}]}
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeResp(payload))
+    from app.retailers.serper import GoogleShoppingProvider
+    o = GoogleShoppingProvider().search("gadget")[0]
+    assert o.external_id.startswith("gs-")         # stable derived id
+    assert o.retailer == "Costco"
+
+
+def test_serper_missing_key_raises(monkeypatch):
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    from app.retailers.serper import GoogleShoppingProvider
+    with pytest.raises(RuntimeError):
+        GoogleShoppingProvider().search("air fryer")
+
+
 # ----- Provider registry ----------------------------------------------------
 
 def test_registry_lists_providers_and_default_is_real():
     from app import retailers
-    assert {"eBay", "BestBuy", "DummyJSON", "FakeStore"} <= set(retailers.available())
+    assert {"eBay", "GoogleShopping", "BestBuy", "DummyJSON", "FakeStore"} <= set(retailers.available())
     assert retailers.DEFAULT_PROVIDER == "eBay"
     assert retailers.get_provider().name == "eBay"
+    assert retailers.get_provider("GoogleShopping").name == "GoogleShopping"
     assert retailers.is_demo("DummyJSON") and retailers.is_demo("FakeStore")
     assert not retailers.is_demo("eBay")
+    assert not retailers.is_demo("GoogleShopping")
     assert not retailers.is_demo("BestBuy")
 
 
@@ -258,6 +309,28 @@ def test_cross_provider_match_merges_into_one_comparison():
     assert {o["retailer"] for o in analysis["offers"]} == {"AlphaMart", "BetaMart"}
     assert analysis["best_price"] == 42.0
     assert analysis["best_retailer"] == "BetaMart"
+
+
+def test_aggregator_attributes_prices_per_store():
+    """An aggregator (one provider, many stores) yields a single catalog product
+    with a real multi-retailer comparison — the price attaches to lp.retailer,
+    not to the provider name."""
+    conn = make_conn()
+    walmart = _lp(external_id="w1", name="Ninja Air Fryer Pro", price=78.92)
+    walmart.retailer = "Walmart"
+    target = _lp(external_id="t1", name="Ninja Air Fryer Pro", price=84.50)
+    target.retailer = "Target"
+    provider = FakeProvider([walmart, target], name="GoogleShopping")
+
+    summary = ingest.ingest_search(conn, provider, "air fryer")
+    assert summary["stores"] == ["Target", "Walmart"]
+    # One product (matched by name), priced at two real stores — not "GoogleShopping".
+    assert conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"] == 1
+    pid = conn.execute("SELECT id FROM products").fetchone()["id"]
+    analysis = engines.analyze(conn, pid)
+    assert {o["retailer"] for o in analysis["offers"]} == {"Walmart", "Target"}
+    assert analysis["best_price"] == 78.92
+    assert analysis["best_retailer"] == "Walmart"
 
 
 def test_cross_provider_match_skips_seed_catalog():

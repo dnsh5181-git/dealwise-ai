@@ -27,6 +27,10 @@ class LiveProduct:
     url: str
     image_url: str = ""
     model_number: str = ""
+    # Which store actually sells this offer. Single-retailer providers leave this
+    # blank and the offer is attributed to the provider's own name. Aggregators
+    # (e.g. Google Shopping) set it per-offer so prices attach to the real store.
+    retailer: str = ""
 
 
 class RetailerProvider:

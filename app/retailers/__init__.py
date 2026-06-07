@@ -11,9 +11,11 @@ from .bestbuy import BestBuyProvider
 from .dummyjson import DummyJSONProvider
 from .ebay import EbayProvider
 from .fakestore import FakeStoreProvider
+from .serper import GoogleShoppingProvider
 
 _PROVIDERS: dict[str, type[RetailerProvider]] = {
     "eBay": EbayProvider,
+    "GoogleShopping": GoogleShoppingProvider,
     "BestBuy": BestBuyProvider,
     "DummyJSON": DummyJSONProvider,
     "FakeStore": FakeStoreProvider,
@@ -53,6 +55,7 @@ __all__ = [
     "DummyJSONProvider",
     "EbayProvider",
     "FakeStoreProvider",
+    "GoogleShoppingProvider",
     "LiveProduct",
     "RetailerProvider",
     "available",

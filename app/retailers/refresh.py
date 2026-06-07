@@ -20,6 +20,7 @@ import os
 import sys
 
 from .. import db
+from ..config import load_dotenv
 from . import default_provider, get_provider, ingest
 from .bootstrap import STARTER_QUERIES
 
@@ -39,6 +40,7 @@ def _refresh_provider():
 
 
 def main() -> int:
+    load_dotenv()  # so a scheduled job (no shell env) gets SERPER_API_KEY etc.
     db.init_db()
     provider = _refresh_provider()
     recorded = 0

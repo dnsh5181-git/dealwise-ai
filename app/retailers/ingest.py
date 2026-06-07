@@ -99,7 +99,7 @@ def _record_price(conn: sqlite3.Connection, product_id: int, retailer_id: int,
 
 
 def ingest_search(conn: sqlite3.Connection, provider: RetailerProvider,
-                  query: str, limit: int = 10) -> dict[str, Any]:
+                  query: str, limit: int = 10, backfill_history: bool = False) -> dict[str, Any]:
     """Fetch live offers for ``query`` and upsert them. Returns a summary.
 
     A price is attributed to ``lp.retailer`` when the offer carries one (an
@@ -107,7 +107,14 @@ def ingest_search(conn: sqlite3.Connection, provider: RetailerProvider,
     response); otherwise it falls back to the provider's own name. ``source``
     (used for dedupe) stays the provider name either way — it records *where the
     data came from*, distinct from *which store sells it*.
+
+    When ``backfill_history`` is set, a newly-added product also gets a modeled
+    90-day baseline (see ``history.backfill_modeled_history``) so its chart and
+    Deal Score aren't empty on day one. Used by the live/user-facing paths, off
+    by default so unit tests see only the real points they insert.
     """
+    from . import history
+
     products = provider.search(query, limit)
     retailer_ids: dict[str, int] = {}  # store name -> retailers.id (cached per call)
 
@@ -124,7 +131,10 @@ def ingest_search(conn: sqlite3.Connection, provider: RetailerProvider,
     for lp in products:
         pid, status = _upsert_product(conn, provider.name, lp)
         store = lp.retailer or provider.name
-        _record_price(conn, pid, retailer_id_for(store), lp.price, lp.in_stock)
+        rid = retailer_id_for(store)
+        if backfill_history and status == "added":
+            history.backfill_modeled_history(conn, pid, rid, lp.price)
+        _record_price(conn, pid, rid, lp.price, lp.in_stock)
         product_ids.append(pid)
         stores.add(store)
         counts[status] += 1

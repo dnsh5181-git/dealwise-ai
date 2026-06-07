@@ -25,10 +25,34 @@ import os
 import re
 import urllib.request
 
+from ..brands import extract_brand
 from .base import LiveProduct, RetailerProvider
 
 _URL = "https://google.serper.dev/shopping"
 _PRICE_RE = re.compile(r"[-+]?\d[\d,]*\.?\d*")
+
+# Google Shopping mixes in listings that misrepresent the real "new" price:
+# used/refurbished units, lease-to-own monthly payments, and accessories. These
+# heuristics keep the catalog trustworthy (the user saw a TV at "$29.99 from My
+# Way Leases" and a watch at a "Restored: Like New" price).
+
+# Condition keywords in a title that mean it's not a new unit.
+_USED_RE = re.compile(
+    r"\b(renew(ed)?|refurb(ished)?|pre[- ]?owned|open[- ]?box|restored|"
+    r"used|for parts|as[- ]is|scratch (and|&) dent)\b", re.I)
+
+# Lease-to-own / rent-to-own — their "price" is a small monthly payment.
+_LEASE_RE = re.compile(r"\b(lease|rent[- ]?to[- ]?own|month|/mo\b)", re.I)
+_LEASE_SELLERS = {
+    "my way leases", "flexshopper", "acima", "acima leasing", "katapult",
+    "progressive leasing", "american first finance", "snap finance", "zibby",
+    "aaron's", "rent-a-center", "rentacenter",
+}
+
+# How far below the median an offer may sit before we treat it as junk
+# (accessory / lease payment / data error). 0.30 = drop anything under 30% of
+# the median price in the result set.
+_OUTLIER_FLOOR = 0.30
 
 
 def _parse_price(raw) -> float:
@@ -46,6 +70,19 @@ def _parse_price(raw) -> float:
         return 0.0
 
 
+def _clean_store(store: str) -> str:
+    """'Walmart - STARWAA WHOLESALE INC' -> 'Walmart'. Collapses a third-party
+    marketplace seller suffix to the host store so the comparison stays clean."""
+    base = re.split(r"\s[-–—]\s", store, maxsplit=1)[0].strip()
+    return base or store
+
+
+def _is_lease(store: str, title: str) -> bool:
+    s = store.lower().strip()
+    return (s in _LEASE_SELLERS or bool(_LEASE_RE.search(store))
+            or bool(_LEASE_RE.search(title)))
+
+
 class GoogleShoppingProvider(RetailerProvider):
     name = "GoogleShopping"
 
@@ -60,7 +97,9 @@ class GoogleShoppingProvider(RetailerProvider):
                 "SERPER_API_KEY is not set. Add it to .env "
                 "(free tier ~2,500 queries/mo at https://serper.dev)."
             )
-        body = json.dumps({"q": query, "gl": self.country, "num": limit}).encode("utf-8")
+        # Over-fetch so quality filtering still leaves ~limit clean offers.
+        num = min(max(limit * 3, 10), 40)
+        body = json.dumps({"q": query, "gl": self.country, "num": num}).encode("utf-8")
         req = urllib.request.Request(
             _URL, data=body, method="POST",
             headers={"X-API-KEY": self.api_key,
@@ -70,12 +109,36 @@ class GoogleShoppingProvider(RetailerProvider):
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 (https URL)
             data = json.loads(resp.read().decode("utf-8"))
         items = data.get("shopping", []) or []
-        out = [self._to_product(it) for it in items[:limit]]
-        # Drop offers with no usable price — they can't be compared or scored.
-        return [p for p in out if p.price > 0]
+        return self._clean(items, limit)
+
+    def _clean(self, items: list[dict], limit: int) -> list[LiveProduct]:
+        """Convert raw Serper items to LiveProducts, dropping non-new / lease /
+        outlier listings so the catalog reflects real new-unit prices."""
+        kept: list[LiveProduct] = []
+        for it in items:
+            title = (it.get("title") or "").strip()
+            store = (it.get("source") or "").strip()
+            if not title:
+                continue
+            if _USED_RE.search(title):          # refurbished / used / open-box
+                continue
+            if _is_lease(store, title):         # lease-to-own monthly payment
+                continue
+            lp = self._to_product(it)
+            if lp.price > 0:
+                kept.append(lp)
+        # Outlier-low filter: drop offers far below the median (accessories,
+        # lease payments, data errors). Needs a few points to be meaningful.
+        if len(kept) >= 4:
+            prices = sorted(p.price for p in kept)
+            median = prices[len(prices) // 2]
+            floor = median * _OUTLIER_FLOOR
+            kept = [p for p in kept if p.price >= floor]
+        return kept[:limit]
 
     def _to_product(self, it: dict) -> LiveProduct:
-        store = (it.get("source") or "").strip() or "Google Shopping"
+        raw_store = (it.get("source") or "").strip() or "Google Shopping"
+        store = _clean_store(raw_store)
         title = (it.get("title") or "").strip()
         # Serper's productId is stable when present; otherwise derive a stable id
         # from store+title so re-ingests dedupe instead of duplicating.
@@ -85,7 +148,8 @@ class GoogleShoppingProvider(RetailerProvider):
         return LiveProduct(
             external_id=ext,
             name=title,
-            brand="Unknown",  # Google Shopping doesn't return a clean brand field
+            # Google Shopping has no clean brand field — derive it from the title.
+            brand=extract_brand(title),
             category="",
             description=(it.get("delivery") or "").strip(),
             price=_parse_price(it.get("price")),

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS products (
     source          TEXT,            -- provider name for live-ingested products (NULL for seed)
     external_id     TEXT,            -- provider's product id, for dedupe across ingests
     norm_name       TEXT,            -- normalized name, for matching the same product across retailers
+    specs           TEXT,            -- cached JSON of AI-generated specifications (lazy)
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
@@ -118,6 +119,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE products ADD COLUMN model_number TEXT")
     if "buy_url" not in cols:
         conn.execute("ALTER TABLE products ADD COLUMN buy_url TEXT")
+    if "specs" not in cols:
+        # Cached JSON of AI-generated specifications (lazily populated per product).
+        conn.execute("ALTER TABLE products ADD COLUMN specs TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_products_source ON products(source, external_id)"
     )

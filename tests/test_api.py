@@ -51,6 +51,100 @@ def test_search_by_category(client):
     assert results and all(x["category"] == "Kitchen" for x in results)
 
 
+# ----- sort + similar -------------------------------------------------------
+
+def test_home_sort_price_low_to_high(client):
+    html = client.get("/", params={"sort": "price_low"}).text
+    import re as _re
+    prices = [float(m) for m in _re.findall(r'best-price">\$([\d,]+\.\d\d)',
+                                            html.replace(",", ""))]
+    assert prices == sorted(prices)            # ascending
+
+
+def test_home_sort_name_az(client):
+    html = client.get("/", params={"sort": "name_az"}).text
+    assert 'selected' in html and 'value="name_az"' in html  # dropdown reflects choice
+
+
+def test_similar_products_endpoint(client):
+    r = client.get("/api/products/1/similar")
+    assert r.status_code == 200
+    sim = r.json()["similar"]
+    assert all(s["id"] != 1 for s in sim)      # never includes the product itself
+    assert all("best_price" in s for s in sim)
+
+
+def test_similar_unknown_product_404(client):
+    assert client.get("/api/products/999999/similar").status_code == 404
+
+
+# ----- autocomplete suggestions ---------------------------------------------
+
+def test_suggest_returns_matches(client):
+    r = client.get("/api/suggest", params={"q": "air"})
+    assert r.status_code == 200
+    body = r.json()
+    texts = [s["text"].lower() for s in body["suggestions"]]
+    assert texts and any("air" in t for t in texts)
+    assert all({"text", "kind"} <= set(s) for s in body["suggestions"])
+
+
+def test_suggest_short_query_is_empty(client):
+    r = client.get("/api/suggest", params={"q": "a"})
+    assert r.status_code == 200
+    assert r.json()["suggestions"] == []
+
+
+# ----- AI specs (graceful without API key) ----------------------------------
+
+def test_specs_endpoint_degrades_without_key(client, monkeypatch):
+    # No ANTHROPIC_API_KEY -> available False with a helpful reason, never a 500.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.get("/api/products/1/specs")
+    assert r.status_code == 200
+    assert r.json()["available"] is False
+
+
+def test_specs_endpoint_serves_cache(client):
+    # Seed a cached specs blob directly and confirm it is returned without an LLM.
+    import json as _json
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE products SET specs = ? WHERE id = 1",
+            (_json.dumps({"summary": "Cached.", "groups": [
+                {"name": "General", "specs": [{"label": "Color", "value": "Black"}]}]}),),
+        )
+        conn.commit()
+    r = client.get("/api/products/1/specs")
+    body = r.json()
+    assert body["available"] is True
+    assert body["summary"] == "Cached."
+    assert body["groups"][0]["specs"][0]["value"] == "Black"
+
+
+# ----- search live fallback -------------------------------------------------
+
+def test_home_search_falls_back_to_live(client, monkeypatch):
+    """A search with no local match fetches live from the preferred provider."""
+    from app import main as main_mod
+    from app.retailers.base import LiveProduct, RetailerProvider
+
+    class _Fake(RetailerProvider):
+        name = "GoogleShopping"
+
+        def search(self, query, limit=10):
+            return [LiveProduct(
+                external_id="zz9", name="Zzytron Mega Gizmo 9000", brand="Zzytron",
+                category="Gadgets", description="", price=42.0, in_stock=True,
+                rating=4.0, review_count=10, url="https://ex/9", retailer="Walmart")]
+
+    monkeypatch.setenv("SERPER_API_KEY", "x")
+    monkeypatch.setattr(main_mod, "preferred_live_provider", lambda: _Fake())
+    r = client.get("/", params={"q": "Zzytron Mega Gizmo"})
+    assert r.status_code == 200
+    assert "Zzytron Mega Gizmo 9000" in r.text   # live-fetched product now shown
+
+
 # ----- product detail / history / barcode -----------------------------------
 
 def test_product_detail_shape(client):

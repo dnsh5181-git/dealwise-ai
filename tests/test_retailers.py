@@ -250,6 +250,43 @@ def test_serper_missing_key_raises(monkeypatch):
         GoogleShoppingProvider().search("air fryer")
 
 
+def test_serper_filters_lease_used_and_outliers(monkeypatch):
+    monkeypatch.setenv("SERPER_API_KEY", "k")
+    payload = {"shopping": [
+        {"title": "Samsung 65\" QLED 4K TV", "source": "Best Buy", "price": "$899.99", "productId": "1"},
+        {"title": "Samsung 65\" QLED 4K TV", "source": "Walmart", "price": "$849.99", "productId": "2"},
+        {"title": "Samsung 65\" QLED 4K TV", "source": "Target", "price": "$879.99", "productId": "3"},
+        {"title": "Samsung 65\" QLED 4K TV", "source": "Costco", "price": "$929.99", "productId": "4"},
+        {"title": "Samsung 65\" QLED 4K TV", "source": "My Way Leases", "price": "$29.99", "productId": "5"},   # lease
+        {"title": "Samsung 65\" QLED 4K TV - Refurbished", "source": "eBay", "price": "$499.99", "productId": "6"},  # used
+        {"title": "Samsung 65\" QLED 4K TV Remote", "source": "Amazon", "price": "$12.99", "productId": "7"},   # outlier-low
+    ]}
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeResp(payload))
+    from app.retailers.serper import GoogleShoppingProvider
+    offers = GoogleShoppingProvider().search("65 inch tv", limit=10)
+    stores = {o.retailer for o in offers}
+    assert "My Way Leases" not in stores            # lease dropped
+    assert all("Refurbished" not in o.name for o in offers)  # used dropped
+    assert all(o.price >= 100 for o in offers)      # $12.99 remote outlier dropped
+    assert {"Best Buy", "Walmart", "Target", "Costco"} <= stores
+
+
+def test_serper_cleans_marketplace_seller(monkeypatch):
+    monkeypatch.setenv("SERPER_API_KEY", "k")
+    payload = {"shopping": [
+        {"title": "Galaxy Watch FE", "source": "Walmart - STARWAA WHOLESALE INC",
+         "price": "$184.00", "productId": "9"},
+    ]}
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeResp(payload))
+    from app.retailers.serper import GoogleShoppingProvider
+    o = GoogleShoppingProvider().search("galaxy watch")[0]
+    assert o.retailer == "Walmart"   # third-party seller suffix collapsed
+
+
 # ----- Provider registry ----------------------------------------------------
 
 def test_registry_lists_providers_and_default_is_real():
@@ -268,6 +305,25 @@ def test_registry_unknown_provider_raises():
     from app import retailers
     with pytest.raises(KeyError):
         retailers.get_provider("Nope")
+
+
+def test_refresh_prefers_google_shopping_when_key_set(monkeypatch):
+    from app.retailers import refresh
+    monkeypatch.delenv("DEALWISE_REFRESH_PROVIDER", raising=False)
+    monkeypatch.setenv("SERPER_API_KEY", "x")
+    assert refresh._refresh_provider().name == "GoogleShopping"
+    # Explicit override wins over the SERPER default.
+    monkeypatch.setenv("DEALWISE_REFRESH_PROVIDER", "eBay")
+    assert refresh._refresh_provider().name == "eBay"
+    # No key, no override -> registry default.
+    monkeypatch.delenv("DEALWISE_REFRESH_PROVIDER", raising=False)
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    assert refresh._refresh_provider().name == retailers_default_name()
+
+
+def retailers_default_name():
+    from app import retailers
+    return retailers.DEFAULT_PROVIDER
 
 
 # ----- Ingestion ------------------------------------------------------------
@@ -331,6 +387,29 @@ def test_aggregator_attributes_prices_per_store():
     assert {o["retailer"] for o in analysis["offers"]} == {"Walmart", "Target"}
     assert analysis["best_price"] == 78.92
     assert analysis["best_retailer"] == "Walmart"
+
+
+def test_backfill_history_populates_90_days():
+    conn = make_conn()
+    walmart = _lp(external_id="w1", name="Test TV", price=500.0)
+    walmart.retailer = "Walmart"
+    provider = FakeProvider([walmart], name="GoogleShopping")
+    ingest.ingest_search(conn, provider, "tv", backfill_history=True)
+    pid = conn.execute("SELECT id FROM products").fetchone()["id"]
+    series = engines.daily_best_series(conn, pid)
+    assert len(series) >= 80          # ~90 days of modeled history + today
+    analysis = engines.analyze(conn, pid)
+    assert analysis["avg_90d"] > 0     # engine now has signal
+    # Modeled prices are anchored on the current price — stay in a sane band.
+    assert 250 <= analysis["low_90d"] <= 500 <= analysis["high_90d"] <= 750
+
+
+def test_backfill_history_off_by_default():
+    conn = make_conn()
+    ingest.ingest_search(conn, FakeProvider([_lp(price=10.0)]), "widget")
+    pid = conn.execute("SELECT id FROM products").fetchone()["id"]
+    assert conn.execute("SELECT COUNT(*) AS n FROM prices WHERE product_id=?",
+                        (pid,)).fetchone()["n"] == 1   # only today's real point
 
 
 def test_cross_provider_match_skips_seed_catalog():

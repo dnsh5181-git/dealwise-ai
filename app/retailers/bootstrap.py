@@ -32,7 +32,7 @@ def main() -> int:
     try:
         with db.get_conn() as conn:
             for query in STARTER_QUERIES:
-                summary = ingest.ingest_search(conn, provider, query, 10)
+                summary = ingest.ingest_search(conn, provider, query, 10, backfill_history=True)
                 for key in totals:
                     totals[key] += summary[key]
                 print(f"  {query:<14} fetched={summary['fetched']:>2} added={summary['added']:>2}")

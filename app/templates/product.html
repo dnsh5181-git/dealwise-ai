@@ -16,12 +16,16 @@
     {% if p.model_number %}<div class="muted small">Model #: {{ p.model_number }}</div>{% endif %}
     <p class="desc">{{ p.description }}</p>
     <div class="head-actions">
-      {% if p.buy_url %}
-        <a class="buy-btn" href="{{ p.buy_url }}" target="_blank" rel="nofollow sponsored noopener">Buy at {{ p.source }} →</a>
+      {% set buy_link = (a.best_url if a else '') or p.buy_url %}
+      {% if buy_link %}
+        <a class="buy-btn" href="{{ buy_link }}" target="_blank" rel="nofollow sponsored noopener">Check price at {{ a.best_retailer if a else p.source }} →</a>
       {% endif %}
       <button class="share-btn" type="button" data-wishlist="{{ p.id }}">♥ Save</button>
       <button class="share-btn" type="button" data-share data-share-title="{{ p.name }}">Share</button>
     </div>
+    {% if p.source and a %}
+    <p class="muted small price-note">Best price tracked {{ a.best_recorded_at[:10] }} — retailers update often, so the live price may differ. Tap through to confirm before buying.</p>
+    {% endif %}
   </div>
 </section>
 
@@ -112,12 +116,15 @@
         <td class="eff">${{ '%.2f'|format(o.effective_price) }}</td>
         <td>{{ '%.0f%%'|format(o.cashback_pct) if o.cashback_pct else '—' }}</td>
         <td>{{ 'In stock' if o.in_stock else 'Out' }}</td>
-        <td>{% if o.retailer == a.best_effective_retailer %}<span class="pill">Best all-in</span>{% endif %}</td>
+        <td>
+          {% if o.url %}<a class="row-link" href="{{ o.url }}" target="_blank" rel="nofollow sponsored noopener">View →</a>{% endif %}
+          {% if o.retailer == a.best_effective_retailer %}<span class="pill">Best all-in</span>{% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  <p class="muted small">“All-in” = price after the best coupon and retailer cashback. Taxes &amp; shipping vary by location and are not included.</p>
+  <p class="muted small">“All-in” = price after the best coupon and retailer cashback. Taxes &amp; shipping vary by location and are not included.{% if p.source %} Prices are tracked snapshots; tap “View” to confirm the live price at the retailer.{% endif %}</p>
 </section>
 
 <div class="two-col">

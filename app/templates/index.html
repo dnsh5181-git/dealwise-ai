@@ -27,6 +27,38 @@
   <p class="muted small" style="margin-top:14px">Items marked “Sample data” are demo placeholders. Fetch real US prices on <a href="/retailers">Live Data</a> — eBay, or Google Shopping for Walmart/Target/Amazon offers.</p>
 </section>
 
+{% if trending %}
+<section class="trending">
+  <div class="trending-head">
+    <h2>🔥 Trending deals</h2>
+    <span class="muted small">Highest deal scores in stock right now</span>
+  </div>
+  <div class="trending-rail">
+    {% for c in trending %}
+    <a class="card" href="/product/{{ c.id }}" data-card>
+      <div class="thumb">
+        <span class="deal-flag">DEAL {{ c.deal_score }}</span>
+        {% if c.image_url %}<img src="{{ c.image_url }}" alt="{{ c.name }}" loading="lazy" />
+        {% else %}<span class="ph">{{ c.name[:1]|upper }}</span>{% endif %}
+      </div>
+      <div class="card-top">
+        <span class="brand-tag">{{ c.brand }}</span>
+        {% if c.recommendation %}<span class="rec rec-{{ c.recommendation|replace(' ','')|lower }}">{{ c.recommendation }}</span>{% endif %}
+      </div>
+      <h3>{{ c.name }}</h3>
+      <div class="price-row">
+        <div>
+          <div class="best-price">${{ '%.2f'|format(c.best_price) }}</div>
+          <div class="muted small">at {{ c.best_retailer }}</div>
+        </div>
+        <div class="score-badge" data-score="{{ c.deal_score }}"><strong>{{ c.deal_score }}</strong><span>deal</span></div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if fetched_live %}
 <p class="muted small live-note">🔴 Fetched {{ fetched_live }} live result{{ 's' if fetched_live != 1 }} from Google Shopping for “{{ q }}”.</p>
 {% endif %}

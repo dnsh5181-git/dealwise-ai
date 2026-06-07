@@ -424,6 +424,18 @@ def test_cross_provider_match_skips_seed_catalog():
     assert conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"] == 2
 
 
+def test_ingest_stores_per_offer_url_and_engine_exposes_best_url():
+    conn = make_conn()
+    lp = _lp(price=42.0)
+    lp.url = "https://store.example/offer/42"
+    ingest.ingest_search(conn, FakeProvider([lp]), "widget")
+    pid = conn.execute("SELECT id FROM products").fetchone()["id"]
+    analysis = engines.analyze(conn, pid)
+    assert analysis["best_url"] == "https://store.example/offer/42"
+    assert analysis["offers"][0]["url"] == "https://store.example/offer/42"
+    assert analysis["best_recorded_at"]   # timestamped
+
+
 def test_ingest_persists_model_number_and_buy_url():
     conn = make_conn()
     ingest.ingest_search(conn, FakeProvider([_lp()]), "widget")

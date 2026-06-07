@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS prices (
     retailer_id     INTEGER NOT NULL REFERENCES retailers(id),
     price           REAL NOT NULL,
     in_stock        INTEGER NOT NULL DEFAULT 1,
-    recorded_at     TEXT NOT NULL
+    recorded_at     TEXT NOT NULL,
+    url             TEXT             -- per-offer buy link (so the best price links to its own listing)
 );
 
 CREATE TABLE IF NOT EXISTS coupons (
@@ -122,6 +123,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "specs" not in cols:
         # Cached JSON of AI-generated specifications (lazily populated per product).
         conn.execute("ALTER TABLE products ADD COLUMN specs TEXT")
+    price_cols = {r["name"] for r in conn.execute("PRAGMA table_info(prices)").fetchall()}
+    if "url" not in price_cols:
+        conn.execute("ALTER TABLE prices ADD COLUMN url TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_products_source ON products(source, external_id)"
     )

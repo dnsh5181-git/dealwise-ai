@@ -25,7 +25,7 @@ import os
 import re
 import urllib.request
 
-from ..brands import extract_brand
+from ..brands import extract_brand, extract_model
 from .base import LiveProduct, RetailerProvider
 
 _URL = "https://google.serper.dev/shopping"
@@ -158,6 +158,6 @@ class GoogleShoppingProvider(RetailerProvider):
             review_count=int(it.get("ratingCount") or 0),
             url=(it.get("link") or "").strip(),
             image_url=(it.get("imageUrl") or "").strip(),
-            model_number="",
+            model_number=extract_model(title),
             retailer=store,
         )

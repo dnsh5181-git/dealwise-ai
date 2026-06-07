@@ -90,11 +90,11 @@ def _upsert_product(conn: sqlite3.Connection, source: str, lp: LiveProduct) -> t
 
 
 def _record_price(conn: sqlite3.Connection, product_id: int, retailer_id: int,
-                  price: float, in_stock: bool) -> None:
+                  price: float, in_stock: bool, url: str = "") -> None:
     conn.execute(
-        """INSERT INTO prices (product_id, retailer_id, price, in_stock, recorded_at)
-           VALUES (?, ?, ?, ?, datetime('now'))""",
-        (product_id, retailer_id, price, 1 if in_stock else 0),
+        """INSERT INTO prices (product_id, retailer_id, price, in_stock, recorded_at, url)
+           VALUES (?, ?, ?, ?, datetime('now'), ?)""",
+        (product_id, retailer_id, price, 1 if in_stock else 0, url or None),
     )
 
 
@@ -134,7 +134,7 @@ def ingest_search(conn: sqlite3.Connection, provider: RetailerProvider,
         rid = retailer_id_for(store)
         if backfill_history and status == "added":
             history.backfill_modeled_history(conn, pid, rid, lp.price)
-        _record_price(conn, pid, rid, lp.price, lp.in_stock)
+        _record_price(conn, pid, rid, lp.price, lp.in_stock, lp.url)
         product_ids.append(pid)
         stores.add(store)
         counts[status] += 1

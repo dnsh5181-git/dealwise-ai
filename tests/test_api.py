@@ -54,10 +54,13 @@ def test_search_by_category(client):
 # ----- sort + similar -------------------------------------------------------
 
 def test_home_sort_price_low_to_high(client):
-    html = client.get("/", params={"sort": "price_low"}).text
+    # Use a category so the deal-sorted "Trending" strip is suppressed and we read
+    # only the main (price-sorted) grid.
+    html = client.get("/", params={"category": "Kitchen", "sort": "price_low"}).text
     import re as _re
     prices = [float(m) for m in _re.findall(r'best-price">\$([\d,]+\.\d\d)',
                                             html.replace(",", ""))]
+    assert len(prices) >= 2
     assert prices == sorted(prices)            # ascending
 
 
@@ -76,6 +79,23 @@ def test_similar_products_endpoint(client):
 
 def test_similar_unknown_product_404(client):
     assert client.get("/api/products/999999/similar").status_code == 404
+
+
+# ----- trending deals -------------------------------------------------------
+
+def test_deals_endpoint(client):
+    r = client.get("/api/deals")
+    assert r.status_code == 200
+    deals = r.json()["deals"]
+    assert deals, "seed data should surface at least one strong deal"
+    scores = [d["deal_score"] for d in deals]
+    assert scores == sorted(scores, reverse=True)   # highest first
+    assert all(s >= 60 for s in scores)             # only strong deals
+
+
+def test_trending_shows_on_landing_not_search(client):
+    assert "Trending deals" in client.get("/").text                # landing
+    assert "Trending deals" not in client.get("/", params={"q": "air"}).text
 
 
 # ----- autocomplete suggestions ---------------------------------------------

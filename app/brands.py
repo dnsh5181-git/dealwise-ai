@@ -44,6 +44,32 @@ _NON_BRAND_TOKENS = {
 }
 
 
+# Tokens that look like a model code but aren't (spec abbreviations).
+_NOT_A_MODEL = {
+    "HDR10", "USB3", "USB2", "DDR4", "DDR5", "AC1200", "AC1900",  # keep AC routers? rare
+}
+# A model code: 2-5 leading letters + 2+ digits + optional trailing alphanumerics
+# (EG201, AF141, QN65Q80D, RX6700). Excludes pure sizes ("65", "4K") and the
+# spec abbreviations above.
+_MODEL_RE = re.compile(r"\b([A-Z]{2,5}[- ]?\d{2,}[A-Z0-9]{0,6})\b")
+
+
+def extract_model(name: str) -> str:
+    """Best-effort manufacturer model code from a title (e.g. 'EG201', 'QN65Q80D').
+    Returns '' when none is confidently present."""
+    if not name:
+        return ""
+    best = ""
+    for m in _MODEL_RE.finditer(name):
+        tok = m.group(1).replace(" ", "").replace("-", "")
+        if tok.upper() in _NOT_A_MODEL:
+            continue
+        # Prefer the longest plausible code (real models carry more entropy).
+        if len(tok) > len(best):
+            best = tok
+    return best
+
+
 def extract_brand(name: str, fallback: str = "Unknown") -> str:
     """Best-effort brand from a product title.
 

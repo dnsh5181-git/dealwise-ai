@@ -13,7 +13,7 @@
     <input type="text" name="q" value="{{ q }}" placeholder="Fetch live, e.g. “phone”, “laptop”, “watch”" autofocus />
     <button type="submit">Fetch &amp; ingest</button>
   </form>
-  <p class="muted small">Providers: {{ providers | map(attribute='name') | join(', ') }}. <strong>eBay</strong> (default) and <strong>BestBuy</strong> are real US data; <strong>GoogleShopping</strong> aggregates real offers from many stores (Walmart, Target, Amazon, …) in one call. All need an API key in <code>.env</code>; DummyJSON/FakeStore are demo APIs. Same product seen at two retailers merges into one comparison.</p>
+  <p class="muted small">Providers: {{ providers | map(attribute='name') | join(', ') }}. <strong>GoogleShopping</strong> (default) aggregates real offers from many stores (Walmart, Target, Amazon, Best Buy, …) in one call; <strong>eBay</strong> and <strong>BestBuy</strong> are also real US data. All need an API key in <code>.env</code>; DummyJSON/FakeStore are demo APIs. Same product seen at two retailers merges into one comparison.</p>
 </section>
 
 {% if error %}

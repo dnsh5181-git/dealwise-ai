@@ -401,3 +401,14 @@ footer {
   background: #dc2626; color: #fff; font-size: .68rem; font-weight: 800; letter-spacing: .03em;
   padding: 3px 8px; border-radius: 999px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 @media (max-width: 700px) { .trending-rail { grid-auto-columns: minmax(160px, 70%); } }
+
+/* ---- Toast + share card button ------------------------------------------ */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px);
+  background: var(--ink); color: var(--bg); padding: 12px 20px; border-radius: 12px;
+  font-size: .92rem; font-weight: 600; box-shadow: var(--shadow); z-index: 60;
+  opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none;
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+.share-card-btn { border-color: var(--brand); color: var(--brand); }
+.share-card-btn:hover { background: var(--brand); color: #fff; }

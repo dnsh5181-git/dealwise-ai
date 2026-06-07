@@ -365,8 +365,158 @@
     });
   }
 
+  // ---- Toast ---------------------------------------------------------------
+  function toast(msg) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(function () { t.classList.add("on"); });
+    setTimeout(function () { t.classList.remove("on"); setTimeout(function () { t.remove(); }, 300); }, 2200);
+  }
+
+  // ---- Share deal card (canvas -> Web Share / download) --------------------
+  function wireShareCard() {
+    var btns = document.querySelectorAll("[data-share-card]");
+    if (!btns.length) return;
+
+    function rr(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function wrap(ctx, text, maxW, maxLines) {
+      var words = text.split(/\s+/), lines = [], line = "";
+      for (var i = 0; i < words.length; i++) {
+        var test = line ? line + " " + words[i] : words[i];
+        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = words[i]; }
+        else line = test;
+        if (lines.length === maxLines - 1 && ctx.measureText(line + "…").width > maxW) break;
+      }
+      if (line) lines.push(line);
+      if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += "…"; }
+      return lines;
+    }
+
+    function draw(d, img) {
+      var W = 1200, H = 630, c = document.createElement("canvas");
+      c.width = W; c.height = H;
+      var x = c.getContext("2d");
+      // Background
+      var g = x.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, "#0b1220"); g.addColorStop(1, "#15233f");
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      x.fillStyle = "rgba(59,130,246,0.10)"; rr(x, 40, 40, W - 80, H - 80, 28); x.fill();
+
+      // Brand wordmark
+      x.fillStyle = "#5b8cff"; x.font = "700 34px Arial";
+      x.fillText("◆", 72, 104);
+      x.fillStyle = "#f2f4f7"; x.font = "800 34px Arial";
+      x.fillText(" DealWise", 96, 104);
+      x.fillStyle = "#5b8cff"; x.fillText(" AI", 96 + x.measureText(" DealWise").width, 104);
+
+      // Product image (or branded placeholder)
+      var ix = 72, iy = 150, isz = 320;
+      x.save(); rr(x, ix, iy, isz, isz, 20); x.clip();
+      x.fillStyle = "#ffffff"; x.fillRect(ix, iy, isz, isz);
+      if (img) { x.drawImage(img, ix, iy, isz, isz); }
+      else {
+        x.fillStyle = "#1e293b"; x.fillRect(ix, iy, isz, isz);
+        x.fillStyle = "#5b8cff"; x.font = "800 140px Arial"; x.textAlign = "center";
+        x.fillText((d.name || "?").charAt(0).toUpperCase(), ix + isz / 2, iy + isz / 2 + 50);
+        x.textAlign = "left";
+      }
+      x.restore();
+
+      // Right column
+      var rx = 440, rw = W - rx - 72;
+      if (d.brand && d.brand !== "Unknown") {
+        x.fillStyle = "#9aa1ab"; x.font = "700 22px Arial";
+        x.fillText(d.brand.toUpperCase(), rx, 175);
+      }
+      x.fillStyle = "#f2f4f7"; x.font = "800 44px Arial";
+      var lines = wrap(x, d.name || "", rw, 3);
+      lines.forEach(function (ln, i) { x.fillText(ln, rx, 225 + i * 52); });
+
+      var py = 225 + lines.length * 52 + 40;
+      // Price
+      x.fillStyle = "#ffffff"; x.font = "800 76px Arial";
+      x.fillText("$" + d.price, rx, py);
+      x.fillStyle = "#9aa1ab"; x.font = "400 26px Arial";
+      x.fillText("at " + d.retailer, rx, py + 36);
+
+      // Deal score badge
+      var hue = Math.round((d.score / 100) * 130);
+      var bx = rx, by = py + 70, bw = 150, bh = 70;
+      x.fillStyle = "hsl(" + hue + ",70%,45%)"; rr(x, bx, by, bw, bh, 14); x.fill();
+      x.fillStyle = "#fff"; x.font = "800 38px Arial";
+      x.fillText(String(d.score), bx + 18, by + 48);
+      x.font = "700 18px Arial"; x.fillText("/100 DEAL", bx + 18 + x.measureText(String(d.score)).width + 6, by + 46);
+      // Recommendation pill
+      x.fillStyle = "rgba(255,255,255,0.12)"; rr(x, bx + bw + 16, by, 200, bh, 14); x.fill();
+      x.fillStyle = "#e2e8f0"; x.font = "800 28px Arial";
+      x.fillText(d.rec || "", bx + bw + 38, by + 44);
+
+      // Savings line
+      var save = Math.max(0, (parseFloat(d.avg) - parseFloat(d.price)));
+      x.fillStyle = "#34d399"; x.font = "700 30px Arial";
+      var savetext = save >= 1
+        ? "You save $" + save.toFixed(2) + " vs the 90-day average"
+        : "Tracked live across multiple US retailers";
+      x.fillText(savetext, rx, by + bh + 56);
+
+      // Footer
+      x.fillStyle = "#64748b"; x.font = "400 22px Arial";
+      x.fillText("Smart shopping intelligence · dealwise", 72, H - 56);
+
+      return c;
+    }
+
+    function exportAndShare(canvas, d) {
+      canvas.toBlob(function (blob) {
+        if (!blob) { toast("Couldn't make the card."); return; }
+        var text = "I found the " + d.name + " for $" + d.price + " at " + d.retailer +
+          " (deal score " + d.score + "/100) on DealWise AI";
+        var file = new File([blob], "dealwise-deal.png", { type: "image/png" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: d.name, text: text }).catch(function () {});
+        } else {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url; a.download = "dealwise-deal.png"; a.click();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+          toast("Deal card downloaded 📤");
+        }
+      }, "image/png");
+    }
+
+    btns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var d = {
+          name: btn.dataset.name, brand: btn.dataset.brand, price: btn.dataset.price,
+          retailer: btn.dataset.retailer, score: parseInt(btn.dataset.score, 10) || 0,
+          rec: btn.dataset.rec, avg: btn.dataset.avg, img: btn.dataset.img,
+        };
+        var orig = btn.textContent; btn.disabled = true; btn.textContent = "Building…";
+        function finish(canvas) { exportAndShare(canvas, d); btn.disabled = false; btn.textContent = orig; }
+        if (d.img) {
+          var im = new Image();
+          im.crossOrigin = "anonymous";   // need a clean canvas to export
+          im.onload = function () { finish(draw(d, im)); };
+          im.onerror = function () { finish(draw(d, null)); };  // CORS/!found -> placeholder
+          im.src = d.img;
+        } else {
+          finish(draw(d, null));
+        }
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initTheme(); tint(); wireHearts(); wireShare(); wirePresets(); wireSubmitStates();
-    wireVoice(); wireScanner(); wirePhoto(); wireAutocomplete();
+    wireVoice(); wireScanner(); wirePhoto(); wireAutocomplete(); wireShareCard();
   });
 })();

@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ p.name }} — DealWise AI{% endblock %}
+{% block head %}
+<meta property="og:title" content="{{ p.name }} — DealWise AI" />
+<meta property="og:type" content="product" />
+{% if a %}<meta property="og:description" content="${{ '%.2f'|format(a.best_price) }} at {{ a.best_retailer }} · Deal score {{ a.deal_score }}/100 · {{ a.recommendation }} — tracked by DealWise AI." />{% endif %}
+{% if p.image_url %}<meta property="og:image" content="{{ p.image_url }}" />{% endif %}
+<meta name="twitter:card" content="summary_large_image" />
+{% endblock %}
 {% block content %}
 <a class="back" href="/">← Back to search</a>
 
@@ -21,7 +28,20 @@
         <a class="buy-btn" href="{{ buy_link }}" target="_blank" rel="nofollow sponsored noopener">Check price at {{ a.best_retailer if a else p.source }} →</a>
       {% endif %}
       <button class="share-btn" type="button" data-wishlist="{{ p.id }}">♥ Save</button>
-      <button class="share-btn" type="button" data-share data-share-title="{{ p.name }}">Share</button>
+      <button class="share-btn" type="button" data-share data-share-title="{{ p.name }}">Share link</button>
+      {% if a %}
+      <button class="share-btn share-card-btn" type="button"
+              data-share-card
+              data-name="{{ p.name }}"
+              data-brand="{{ p.brand }}"
+              data-price="{{ '%.2f'|format(a.best_price) }}"
+              data-retailer="{{ a.best_retailer }}"
+              data-score="{{ a.deal_score }}"
+              data-rec="{{ a.recommendation }}"
+              data-avg="{{ '%.2f'|format(a.avg_90d) }}"
+              data-low="{{ '%.2f'|format(a.low_90d) }}"
+              data-img="{{ p.image_url }}">📤 Share deal card</button>
+      {% endif %}
     </div>
     {% if p.source and a %}
     <p class="muted small price-note">Best price tracked {{ a.best_recorded_at[:10] }} — retailers update often, so the live price may differ. Tap through to confirm before buying.</p>

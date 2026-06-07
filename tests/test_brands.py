@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from app.brands import extract_brand
+from app.brands import extract_brand, extract_model
+
+
+@pytest.mark.parametrize(("title", "expected"), [
+    ("Ninja Foodi 6-in-1 Indoor Grill and Air Fryer EG201", "EG201"),
+    ('Samsung 65" Class QN65Q80D QLED 4K TV', "QN65Q80D"),
+    ("Ninja DoubleStack XL 2 Basket Air Fryer", ""),     # no real model code
+    ("Apple MacBook Pro 14", ""),                         # '14' alone isn't a model
+    ("VIZIO D Series 4K HDR Smart TV", ""),               # HDR/4K excluded
+])
+def test_extract_model(title, expected):
+    assert extract_model(title) == expected
 
 
 @pytest.mark.parametrize(("title", "expected"), [

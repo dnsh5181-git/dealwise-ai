@@ -137,6 +137,20 @@ SORT_OPTIONS = [
 _SORT_KEYS = {k for k, _ in SORT_OPTIONS}
 
 
+def top_deals(conn, limit: int = 8, min_score: int = 60) -> list[dict]:
+    """Best current deals across the catalog: highest deal score first, only
+    in-stock products scoring at least ``min_score``. Powers the homepage feed."""
+    rows = conn.execute(
+        "SELECT * FROM products ORDER BY review_count DESC LIMIT 200").fetchall()
+    cards = []
+    for r in rows:
+        c = product_card(conn, r)
+        if c["best_price"] is not None and (c["deal_score"] or 0) >= min_score:
+            cards.append(c)
+    cards.sort(key=lambda c: (c["deal_score"] or 0), reverse=True)
+    return cards[:limit]
+
+
 def sort_cards(cards: list[dict], sort: str | None) -> list[dict]:
     """Order result cards by the chosen key. Unknown/None -> popularity.
 
@@ -234,6 +248,13 @@ def api_history(product_id: int):
         if not series:
             raise HTTPException(404, "No price history")
         return {"product_id": product_id, "history": [{"date": d, "price": p} for d, p in series]}
+
+
+@app.get("/api/deals")
+def api_deals(limit: int = 8):
+    """Trending deals: top deal-score products in stock right now."""
+    with db.get_conn() as conn:
+        return {"deals": top_deals(conn, limit)}
 
 
 @app.get("/api/products/{product_id}/similar")
@@ -474,10 +495,12 @@ def home(request: Request, q: str | None = None, category: str | None = None,
         cards = sort_cards([product_card(conn, r) for r in rows], sort)
         cats = [r["category"] for r in conn.execute(
             "SELECT DISTINCT category FROM products ORDER BY category").fetchall()]
+        # Trending strip only on the default landing (no search / no category).
+        trending = top_deals(conn, 8) if not q and not category else []
     return templates.TemplateResponse(request, "index.html", {
         "cards": cards, "q": q or "",
         "categories": cats, "active_category": category,
-        "fetched_live": fetched_live,
+        "fetched_live": fetched_live, "trending": trending,
         "sort_options": SORT_OPTIONS, "active_sort": sort if sort in _SORT_KEYS else "popularity",
     })
 

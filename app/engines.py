@@ -54,7 +54,7 @@ def latest_prices(conn: sqlite3.Connection, product_id: int) -> list[sqlite3.Row
     return conn.execute(
         """
         SELECT r.id AS retailer_id, r.name AS retailer, r.cashback_pct,
-               p.price, p.in_stock, p.recorded_at
+               p.price, p.in_stock, p.recorded_at, p.url
         FROM prices p
         JOIN retailers r ON r.id = p.retailer_id
         JOIN (
@@ -249,6 +249,8 @@ def analyze(conn: sqlite3.Connection, product_id: int) -> dict[str, Any] | None:
             "coupon_savings": round(coupon_sav, 2),
             "cashback_savings": round(cashback_sav, 2),
             "effective_price": round(after_coupon - cashback_sav, 2),
+            "url": r["url"] or "",
+            "recorded_at": r["recorded_at"],
         })
 
     eff_pool = [o for o in offers if o["in_stock"]] or offers
@@ -257,6 +259,8 @@ def analyze(conn: sqlite3.Connection, product_id: int) -> dict[str, Any] | None:
     return {
         "best_price": round(best_now, 2),
         "best_retailer": best_row["retailer"],
+        "best_url": best_row["url"] or "",
+        "best_recorded_at": best_row["recorded_at"],
         "best_effective_price": best_eff["effective_price"],
         "best_effective_retailer": best_eff["retailer"],
         "effective_savings": round(best_now - best_eff["effective_price"], 2),

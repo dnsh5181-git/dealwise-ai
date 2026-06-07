@@ -384,3 +384,20 @@ footer {
 }
 .sort-form select:focus { border-color: var(--brand); }
 .sim-grid { margin-top: 4px; }
+
+/* ---- Price trust: per-offer link + freshness ---------------------------- */
+.row-link { color: var(--brand); text-decoration: none; font-weight: 600; font-size: .85rem; margin-right: 8px; }
+.row-link:hover { text-decoration: underline; }
+.price-note { max-width: 640px; margin-top: 8px; }
+
+/* ---- Trending deals strip ----------------------------------------------- */
+.trending { max-width: 1080px; margin: 8px auto 0; padding: 0 24px; }
+.trending-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.trending-head h2 { font-size: 1.3rem; margin: 0; }
+.trending-rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr);
+  gap: 14px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
+.trending-rail .card { scroll-snap-align: start; }
+.deal-flag { position: absolute; top: 8px; left: 8px; z-index: 2;
+  background: #dc2626; color: #fff; font-size: .68rem; font-weight: 800; letter-spacing: .03em;
+  padding: 3px 8px; border-radius: 999px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+@media (max-width: 700px) { .trending-rail { grid-auto-columns: minmax(160px, 70%); } }
